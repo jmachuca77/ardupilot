@@ -125,6 +125,7 @@ void AP_MotorsMatrix::output_to_motors()
             break;
     }
 
+    
     // send output to each motor
     hal.rcout->cork();
     for (i=0; i<AP_MOTORS_MAX_NUM_MOTORS; i++) {
@@ -281,7 +282,52 @@ void AP_MotorsMatrix::output_armed_stabilizing()
             _thrust_rpyt_out[i] = throttle_thrust_best_rpy + thr_adj + rpy_scale*_thrust_rpyt_out[i];
         }
     }
+    
+    // SOLO ESC PROTECTION SLEW RATE
+    // If parameter MOT_SOLO_SLEW is true, apply the slew rate, otherwise skip.
+    // The Solo requires this unless a FC with 5 volt signalling is used such as Green Cube or Cube 2.1 set for 5 volt.
+    // No other vehicle requires this.
+    // MOT_SOLO_SLEW default is zero for disabled.    
+    if ( _solo_slew_en ) {
+        int16_t slew_per_step = _solo_slew_ps; // Was static const 6
+        int16_t slew_minimum = _solo_slew_mn; // Was static const 1330
+        for (i=0; i<AP_MOTORS_MAX_NUM_MOTORS; i++) {
+            if (motor_enabled[i]) {
+                _max_motor_out[i] = MAX(_max_motor_out[i], slew_minimum-slew_per_step);
+                int16_t max_increment = _thrust_rpyt_out[i] - _max_motor_out[i];
 
+                if (max_increment > slew_per_step) {
+                    max_increment = slew_per_step;
+                } else if (max_increment < -slew_per_step) {
+                    max_increment = -slew_per_step;
+                }
+
+                _max_motor_out[i] += max_increment;
+
+                _max_motor_out[i] = MAX(_max_motor_out[i], slew_minimum-slew_per_step);
+                
+                int16_t thrust_orig = _thrust_rpyt_out[i];
+                
+                _thrust_rpyt_out[i] = MIN(_thrust_rpyt_out[i], _max_motor_out[i]);
+                
+                int16_t thrust_slewed = _thrust_rpyt_out[i]
+                
+                //Log Slewing
+                DataFlash_Class::instance()->Log_Write("MOT_SLEW", "TimeUS,ssen,slps,slmn,slmmo,slrpyt,throrig,thrsl", "Qfffffff",
+                                           now,
+                                           (double)_solo_slew_en,
+                                           (double)_solo_slew_ps,
+                                           (double)_solo_slew_mn,
+                                           (double)_max_motor_out,
+                                           (double)_thrust_rpyt_out,
+                                           (double)thrust_orig,
+                                           (double)thrust_slewed);
+            }
+        }
+    }
+    
+    
+    
     // constrain all outputs to 0.0f to 1.0f
     // test code should be run with these lines commented out as they should not do anything
     for (i=0; i<AP_MOTORS_MAX_NUM_MOTORS; i++) {

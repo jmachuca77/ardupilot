@@ -163,6 +163,30 @@ const AP_Param::GroupInfo AP_MotorsMulticopter::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("SPOOL_TIME",   36, AP_MotorsMulticopter,  _spool_up_time, AP_MOTORS_SPOOL_UP_TIME_DEFAULT),
     
+    // @Param: SOLO_SLEW_E
+    // @DisplayName: Solo Slew Rate Protection Enable/Disable
+    // @Description: Enables the slew rate protection for a stock Solo. A solo with a FC that uses 3 volt signalling (including the stock PH2) requires this to be enabled. A solo with the Green Cube or a Cube 2.1 set for 5v signalling does not need this enabled. No other vehicle needs this enabled. Default (0) is disabled.
+    // @Values: 0:Disabled,1:Enabled
+    // @User: Advanced
+    AP_GROUPINFO("SOLO_SLEW_EN",   37, AP_MotorsMulticopter,  _solo_slew_en, 0),
+    
+    // @Param: SOLO_SLEW_PS
+    // @DisplayName: Solo Slew Per Step
+    // @Description: Changes the Slew Per Step value for the Solo's motor output slewing. Default is 6. Slewing does nothing unless enabled with MOT_SOLO_SLEW.
+    // @Range: 1 12
+    // @Increment: 1
+    // @User: Advanced
+    AP_GROUPINFO("SOLO_SLEW_PS",   38, AP_MotorsMulticopter,  _solo_slew_ps, 6),
+    
+    // @Param: SOLO_SLEW_MN
+    // @DisplayName: Solo Slew Minimum
+    // @Description: Changes the Slew Minimum value for the Solo's motor output slewing.  Default is 1300.  Slewing does nothing unless enabled with MOT_SOLO_SLEW.
+    // @Range: 1000 2000
+    // @Increment: 1
+    // @User: Advanced
+    AP_GROUPINFO("SOLO_SLEW_MN",   39, AP_MotorsMulticopter,  _solo_slew_mn, 1300),
+    
+    
     AP_GROUPEND
 };
 
