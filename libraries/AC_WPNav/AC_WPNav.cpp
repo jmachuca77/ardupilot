@@ -171,6 +171,32 @@ void AC_WPNav::set_speed_xy(float speed_cms)
     }
 }
 
+/// set_speed_up - allows main code to pass target climbing velocity for wp navigation
+void AC_WPNav::set_speed_up(float speed_cms)
+{
+    // range check new target speed and update position controller
+    if (speed_cms >= WPNAV_WP_SPEED_UP_MIN)
+    {
+        _wp_speed_up_cms = speed_cms;
+        _pos_control.set_speed_z(-_wp_speed_down_cms, _wp_speed_up_cms);
+        // flag that wp leash must be recalculated
+        _flags.recalc_wp_leash = true;
+    }
+}
+
+/// set_speed_up - allows main code to pass target climbing velocity for wp navigation
+void AC_WPNav::set_speed_down(float speed_cms)
+{
+    // range check new target speed and update position controller
+    if (speed_cms >= WPNAV_WP_SPEED_DOWN_MIN)
+    {
+        _wp_speed_down_cms = speed_cms;
+        _pos_control.set_speed_z(-_wp_speed_down_cms, _wp_speed_up_cms);
+        // flag that wp leash must be recalculated
+        _flags.recalc_wp_leash = true;
+    }
+}
+
 /// set_wp_destination waypoint using location class
 ///     returns false if conversion from location to vector from ekf origin cannot be calculated
 bool AC_WPNav::set_wp_destination(const Location_Class& destination)

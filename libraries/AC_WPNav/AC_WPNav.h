@@ -21,7 +21,9 @@
 #define WPNAV_WP_RADIUS_MIN              10.0f      // minimum waypoint radius in cm
 
 #define WPNAV_WP_SPEED_UP               250.0f      // default maximum climb velocity
+#define WPNAV_WP_SPEED_UP_MIN            20.0f      // minimum climb speed between waypoints in cm/s
 #define WPNAV_WP_SPEED_DOWN             150.0f      // default maximum descent velocity
+#define WPNAV_WP_SPEED_DOWN_MIN          20.0f      // minimum descnet speed between waypoints in cm/s
 
 #define WPNAV_WP_ACCEL_Z_DEFAULT        100.0f      // default vertical acceleration between waypoints in cm/s/s
 
@@ -81,8 +83,14 @@ public:
     /// get_speed_xy - allows main code to retrieve target horizontal velocity for wp navigation
     float get_speed_xy() const { return _wp_speed_cms; }
 
+    /// set_speed_up - allows main code to pass target climb speed in cm/s during missions
+    void set_speed_up(float speed_cms);
+
     /// get_speed_up - returns target climb speed in cm/s during missions
     float get_speed_up() const { return _wp_speed_up_cms; }
+
+    /// set_speed_up - allows main code to pass target descent speed in cm/s during missions
+    void set_speed_down(float speed_cms);
 
     /// get_speed_down - returns target descent speed in cm/s during missions.  Note: always positive
     float get_speed_down() const { return _wp_speed_down_cms; }
