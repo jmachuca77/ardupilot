@@ -2616,18 +2616,6 @@ void GCS_MAVLINK::handle_common_message(mavlink_message_t *msg)
         handle_att_pos_mocap(msg);
         break;
 
-    case MAVLINK_MSG_ID_RAW_PRESSURE:
-    case MAVLINK_MSG_ID_SCALED_PRESSURE:
-        AP::baro().handle_msg(msg);
-        break;
-    
-    case MAVLINK_MSG_ID_RAW_IMU:
-    case MAVLINK_MSG_ID_SCALED_IMU:
-    case MAVLINK_MSG_ID_SCALED_IMU2:
-    case MAVLINK_MSG_ID_SCALED_IMU3:
-        handle_imu(msg);
-        break;
-
     case MAVLINK_MSG_ID_SYSTEM_TIME:
         handle_system_time_message(msg);
         break;
