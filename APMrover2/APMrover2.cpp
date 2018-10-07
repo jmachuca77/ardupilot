@@ -60,9 +60,8 @@ const AP_Scheduler::Task Rover::scheduler_tasks[] = {
     SCHED_TASK(update_mission,         50,    200),
     SCHED_TASK(update_logging1,        10,    200),
     SCHED_TASK(update_logging2,        10,    200),
-    SCHED_TASK(gcs_retry_deferred,     50,    500),
-    SCHED_TASK(gcs_update,             50,    500),
-    SCHED_TASK(gcs_data_stream_send,   50,   1000),
+    SCHED_TASK(gcs_retry_deferred,     400,    500),
+    SCHED_TASK(gcs_data_stream_send,   400,   1000),
     SCHED_TASK(read_mode_switch,        7,    200),
     SCHED_TASK(read_aux_all,           10,    200),
     SCHED_TASK_CLASS(AP_BattMonitor,      &rover.battery,          read,           10,  300),
@@ -133,6 +132,8 @@ void Rover::setup()
 
     // initialise the main loop scheduler
     scheduler.init(&scheduler_tasks[0], ARRAY_SIZE(scheduler_tasks), MASK_LOG_PM);
+
+    gcs.set_system_initialized();
 }
 
 /*
@@ -155,11 +156,6 @@ void Rover::update_soft_armed()
 void Rover::ahrs_update()
 {
     update_soft_armed();
-
-#if HIL_MODE != HIL_MODE_DISABLED
-    // update hil before AHRS update
-    gcs_update();
-#endif
 
     // AHRS may use movement to calculate heading
     update_ahrs_flyforward();

@@ -194,7 +194,7 @@ public:
     void send_home() const;
     void send_ekf_origin() const;
     virtual void send_position_target_global_int() { };
-    void send_servo_output_raw();
+    void send_servo_output_raw(bool useSRVchannelSource);
     static void send_collision_all(const AP_Avoidance::Obstacle &threat, MAV_COLLISION_ACTION behaviour);
     void send_accelcal_vehicle_position(uint32_t position);
 
@@ -276,6 +276,7 @@ protected:
 
     // saveable rate of each stream
     AP_Int16        streamRates[NUM_STREAMS];
+    AP_Int16        highspeed_stream_bitmask;
 
     virtual bool persist_streamrates() const { return false; }
     void handle_request_data_stream(mavlink_message_t *msg);
@@ -385,92 +386,113 @@ protected:
     static constexpr const float magic_force_disarm_value = 21196.0f;
 
 private:
+  enum GcsHighspeedStreamMask
+  {
+      GCS_HIGHSPEED_STREAM_MASK_SERVO_OUT = (1 << 0),
+      GCS_HIGHSPEED_STREAM_MASK_IMU_MAG = (1 << 1),
+      GCS_HIGHSPEED_STREAM_MASK_GPS = (1 << 2),
+      GCS_HIGHSPEED_STREAM_MASK_BARO = (1 << 3),
+      GCS_HIGHSPEED_STREAM_MASK_RC_IN = (1 << 4),
+  };
+  enum GcsHighspeedStreamIndex
+  {
+      GCS_HIGHSPEED_STREAM_INDEX_IMU_MAG = 0,
+      GCS_HIGHSPEED_STREAM_INDEX_GPS = 1,
+      GCS_HIGHSPEED_STREAM_INDEX_BARO = 2,
+      GCS_HIGHSPEED_STREAM_INDEX_SERVO_OUT = 3,
+      GCS_HIGHSPEED_STREAM_INDEX_RC_IN = 4,
+      GCS_HIGHSPEED_STREAM_INDEX_COUNT = 5, // must be last
+  };
 
-    float       adjust_rate_for_stream_trigger(enum streams stream_num);
+  uint32_t highspeed_stream_last_ms[GCS_HIGHSPEED_STREAM_INDEX_COUNT] = {0};
+  void send_highspeed_streams();
 
-    MAV_RESULT _set_mode_common(const MAV_MODE base_mode, const uint32_t custom_mode);
+  float adjust_rate_for_stream_trigger(enum streams stream_num);
 
-    virtual void        handleMessage(mavlink_message_t * msg) = 0;
+  MAV_RESULT _set_mode_common(const MAV_MODE base_mode, const uint32_t custom_mode);
 
-    MAV_RESULT handle_servorelay_message(const mavlink_command_long_t &packet);
+  virtual void handleMessage(mavlink_message_t *msg) = 0;
 
-    bool calibrate_gyros();
+  MAV_RESULT handle_servorelay_message(const mavlink_command_long_t &packet);
 
-    /// The stream we are communicating over
-    AP_HAL::UARTDriver *_port;
+  bool calibrate_gyros();
 
-    /// Perform queued sending operations
-    ///
-    enum ap_var_type            _queued_parameter_type; ///< type of the next
-                                                        // parameter
-    AP_Param::ParamToken        _queued_parameter_token; ///AP_Param token for
-                                                         // next() call
-    uint16_t                    _queued_parameter_index; ///< next queued
-                                                         // parameter's index
-    uint16_t                    _queued_parameter_count; ///< saved count of
-                                                         // parameters for
-                                                         // queued send
-    uint32_t                    _queued_parameter_send_time_ms;
+  /// The stream we are communicating over
+  AP_HAL::UARTDriver *_port;
 
-    /// Count the number of reportable parameters.
-    ///
-    /// Not all parameters can be reported via MAVlink.  We count the number
-    // that are
-    /// so that we can report to a GCS the number of parameters it should
-    // expect when it
-    /// requests the full set.
-    ///
-    /// @return         The number of reportable parameters.
-    ///
-    uint16_t                    packet_drops;
+  /// Perform queued sending operations
+  ///
+  enum ap_var_type _queued_parameter_type;      ///< type of the next
+                                                // parameter
+  AP_Param::ParamToken _queued_parameter_token; ///AP_Param token for
+                                                // next() call
+  uint16_t _queued_parameter_index;             ///< next queued
+                                                // parameter's index
+  uint16_t _queued_parameter_count;             ///< saved count of
+                                                // parameters for
+                                                // queued send
+  uint32_t _queued_parameter_send_time_ms;
 
-    // waypoints
-    uint16_t        waypoint_dest_sysid; // where to send requests
-    uint16_t        waypoint_dest_compid; // "
-    uint16_t        waypoint_count;
-    uint32_t        waypoint_timelast_receive; // milliseconds
-    uint32_t        waypoint_timelast_request; // milliseconds
-    const uint16_t  waypoint_receive_timeout = 8000; // milliseconds
+  /// Count the number of reportable parameters.
+  ///
+  /// Not all parameters can be reported via MAVlink.  We count the number
+  // that are
+  /// so that we can report to a GCS the number of parameters it should
+  // expect when it
+  /// requests the full set.
+  ///
+  /// @return         The number of reportable parameters.
+  ///
+  uint16_t packet_drops;
 
-    // number of 50Hz ticks until we next send this stream
-    uint8_t         stream_ticks[NUM_STREAMS];
+  // waypoints
+  uint16_t waypoint_dest_sysid;  // where to send requests
+  uint16_t waypoint_dest_compid; // "
+  uint16_t waypoint_count;
+  uint32_t waypoint_timelast_receive;             // milliseconds
+  uint32_t waypoint_timelast_request;             // milliseconds
+  const uint16_t waypoint_receive_timeout = 8000; // milliseconds
 
-    // number of extra ticks to add to slow things down for the radio
-    uint8_t         stream_slowdown;
+  // number of 50Hz ticks until we next send this stream
+  uint8_t stream_ticks[NUM_STREAMS];
 
-    // perf counters
-    AP_HAL::Util::perf_counter_t _perf_packet;
-    AP_HAL::Util::perf_counter_t _perf_update;
-    char _perf_packet_name[16];
-    char _perf_update_name[16];
+  // number of extra ticks to add to slow things down for the radio
+  uint8_t stream_slowdown;
 
-    // deferred message handling.  We size the deferred_message
-    // ringbuffer so we can defer every message type
-    enum ap_message deferred_messages[MSG_LAST];
-    uint8_t next_deferred_message;
-    uint8_t num_deferred_messages;
+  // perf counters
+  AP_HAL::Util::perf_counter_t _perf_packet;
+  AP_HAL::Util::perf_counter_t _perf_update;
+  char _perf_packet_name[16];
+  char _perf_update_name[16];
 
-    // time when we missed sending a parameter for GCS
-    static uint32_t reserve_param_space_start_ms;
-    
-    // bitmask of what mavlink channels are active
-    static uint8_t mavlink_active;
+  // deferred message handling.  We size the deferred_message
+  // ringbuffer so we can defer every message type
+  enum ap_message deferred_messages[MSG_LAST];
+  uint8_t next_deferred_message;
+  uint8_t num_deferred_messages;
 
-    // bitmask of what mavlink channels are streaming
-    static uint8_t chan_is_streaming;
+  // time when we missed sending a parameter for GCS
+  static uint32_t reserve_param_space_start_ms;
 
-    // mavlink routing object
-    static MAVLink_routing routing;
+  // bitmask of what mavlink channels are active
+  static uint8_t mavlink_active;
 
-    // pointer to static frsky_telem for queueing of text messages
-    static AP_Frsky_Telem *frsky_telemetry_p;
- 
-    static const AP_SerialManager *serialmanager_p;
+  // bitmask of what mavlink channels are streaming
+  static uint8_t chan_is_streaming;
 
-    struct pending_param_request {
-        mavlink_channel_t chan;
-        int16_t param_index;
-        char param_name[AP_MAX_NAME_SIZE+1];
+  // mavlink routing object
+  static MAVLink_routing routing;
+
+  // pointer to static frsky_telem for queueing of text messages
+  static AP_Frsky_Telem *frsky_telemetry_p;
+
+  static const AP_SerialManager *serialmanager_p;
+
+  struct pending_param_request
+  {
+      mavlink_channel_t chan;
+      int16_t param_index;
+      char param_name[AP_MAX_NAME_SIZE + 1];
     };
 
     struct pending_param_reply {
@@ -496,6 +518,8 @@ private:
     void send_parameter_reply(void);
 
     void send_distance_sensor(const AP_RangeFinder_Backend *sensor, const uint8_t instance) const;
+
+    void handle_imu(const mavlink_message_t *msg);
 
     virtual bool handle_guided_request(AP_Mission::Mission_Command &cmd) = 0;
     virtual void handle_change_alt_request(AP_Mission::Mission_Command &cmd) = 0;
@@ -597,6 +621,7 @@ public:
     virtual const GCS_MAVLINK &chan(const uint8_t ofs) const = 0;
     virtual uint8_t num_gcs() const = 0;
     void send_message(enum ap_message id);
+    void send_servo_output_raw(bool useSRVchannelSource);
     void send_mission_item_reached_message(uint16_t mission_index);
     void send_named_float(const char *name, float value) const;
     void send_home() const;
@@ -625,6 +650,8 @@ public:
     void set_dataflash(DataFlash_Class *dataflash) {
         dataflash_p = dataflash;
     }
+
+    void set_system_initialized() { system_initialized = true; }
 
     // pointer to static dataflash for logging of text messages
     DataFlash_Class *dataflash_p;
@@ -671,6 +698,8 @@ private:
 
     // true if we are running short on time in our main loop
     bool _out_of_time;
+
+    bool system_initialized;
 };
 
 GCS &gcs();

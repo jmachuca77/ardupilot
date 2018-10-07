@@ -18,12 +18,14 @@
 #include "Storage.h"
 #include "UARTDriver.h"
 #include "Util.h"
+#include "GCS_MAVLink/GCS.h"
 
 using namespace Linux;
 
 extern const AP_HAL::HAL& hal;
 
 #define APM_LINUX_MAX_PRIORITY          20
+#define APM_LINUX_GCS_PRIORITY          16
 #define APM_LINUX_TIMER_PRIORITY        15
 #define APM_LINUX_UART_PRIORITY         14
 #define APM_LINUX_RCIN_PRIORITY         13
@@ -31,7 +33,9 @@ extern const AP_HAL::HAL& hal;
 #define APM_LINUX_IO_PRIORITY           10
 
 #define APM_LINUX_TIMER_RATE            1000
-#define APM_LINUX_UART_RATE             100
+#define APM_LINUX_UART_RATE             400
+#define APM_LINUX_GCS_RATE              400
+
 #if CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_NAVIO ||    \
     CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_ERLEBRAIN2 || \
     CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_BH || \
@@ -92,6 +96,7 @@ void Scheduler::init()
     } sched_table[] = {
         SCHED_THREAD(timer, TIMER),
         SCHED_THREAD(uart, UART),
+        SCHED_THREAD(gcs, GCS),
         SCHED_THREAD(rcin, RCIN),
         SCHED_THREAD(io, IO),
     };
@@ -127,13 +132,15 @@ void Scheduler::_debug_stack()
 
     if (now - _last_stack_debug_msec > 5000) {
         fprintf(stderr, "Stack Usage:\n"
-                "\ttimer = %zu\n"
-                "\tio    = %zu\n"
-                "\trcin  = %zu\n"
-                "\tuart  = %zu\n",
+                        "\ttimer = %zu\n"
+                        "\tio    = %zu\n"
+                        "\trcin  = %zu\n"
+                        "\tgcs   = %zu\n"
+                        "\tuart  = %zu\n",
                 _timer_thread.get_stack_usage(),
                 _io_thread.get_stack_usage(),
                 _rcin_thread.get_stack_usage(),
+                _gcs_thread.get_stack_usage(),
                 _uart_thread.get_stack_usage());
         _last_stack_debug_msec = now;
     }
@@ -275,6 +282,16 @@ void Scheduler::_uart_task()
     _run_uarts();
 }
 
+void Scheduler::_gcs_task()
+{
+    if (!_gcs_semaphore.take(HAL_SEMAPHORE_BLOCK_FOREVER))
+    {
+        return;
+    }
+    gcs().update();
+    _gcs_semaphore.give();
+}
+
 void Scheduler::_io_task()
 {
     // process any pending storage writes
@@ -334,11 +351,13 @@ void Scheduler::teardown()
     _io_thread.stop();
     _rcin_thread.stop();
     _uart_thread.stop();
+    _gcs_thread.stop();
 
     _timer_thread.join();
     _io_thread.join();
     _rcin_thread.join();
     _uart_thread.join();
+    _gcs_thread.join();
 }
 
 /*
@@ -356,16 +375,17 @@ bool Scheduler::thread_create(AP_HAL::MemberProc proc, const char *name, uint32_
         priority_base base;
         uint8_t p;
     } priority_map[] = {
-        { PRIORITY_BOOST, APM_LINUX_MAIN_PRIORITY},
-        { PRIORITY_MAIN, APM_LINUX_MAIN_PRIORITY},
-        { PRIORITY_SPI, AP_LINUX_SENSORS_SCHED_PRIO},
-        { PRIORITY_I2C, AP_LINUX_SENSORS_SCHED_PRIO},
-        { PRIORITY_CAN, APM_LINUX_TIMER_PRIORITY},
-        { PRIORITY_TIMER, APM_LINUX_TIMER_PRIORITY},
-        { PRIORITY_RCIN, APM_LINUX_RCIN_PRIORITY},
-        { PRIORITY_IO, APM_LINUX_IO_PRIORITY},
-        { PRIORITY_UART, APM_LINUX_UART_PRIORITY},
-        { PRIORITY_STORAGE, APM_LINUX_IO_PRIORITY},
+        {PRIORITY_BOOST, APM_LINUX_MAIN_PRIORITY},
+        {PRIORITY_MAIN, APM_LINUX_MAIN_PRIORITY},
+        {PRIORITY_SPI, AP_LINUX_SENSORS_SCHED_PRIO},
+        {PRIORITY_I2C, AP_LINUX_SENSORS_SCHED_PRIO},
+        {PRIORITY_CAN, APM_LINUX_TIMER_PRIORITY},
+        {PRIORITY_TIMER, APM_LINUX_TIMER_PRIORITY},
+        {PRIORITY_RCIN, APM_LINUX_RCIN_PRIORITY},
+        {PRIORITY_IO, APM_LINUX_IO_PRIORITY},
+        {PRIORITY_UART, APM_LINUX_UART_PRIORITY},
+        {PRIORITY_GCS, APM_LINUX_GCS_PRIORITY},
+        {PRIORITY_STORAGE, APM_LINUX_IO_PRIORITY},
     };
     for (uint8_t i=0; i<ARRAY_SIZE(priority_map); i++) {
         if (priority_map[i].base == base) {
