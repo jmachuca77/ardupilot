@@ -519,7 +519,7 @@ private:
 
     void send_distance_sensor(const AP_RangeFinder_Backend *sensor, const uint8_t instance) const;
 
-    void handle_imu(const mavlink_message_t *msg);
+    //void handle_imu(const mavlink_message_t *msg);
 
     virtual bool handle_guided_request(AP_Mission::Mission_Command &cmd) = 0;
     virtual void handle_change_alt_request(AP_Mission::Mission_Command &cmd) = 0;

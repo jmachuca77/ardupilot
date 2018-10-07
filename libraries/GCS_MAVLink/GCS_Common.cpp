@@ -2622,7 +2622,7 @@ void GCS_MAVLINK::handle_common_message(mavlink_message_t *msg)
     }
 }
 
-void GCS_MAVLINK::handle_imu(const mavlink_message_t *msg)
+/* void GCS_MAVLINK::handle_imu(const mavlink_message_t *msg)
 {
     // since these packets will be coming in very fast (like >100hz), and the
     // content is for multiple libraries (ins and compass), then lets decode here
@@ -2680,7 +2680,7 @@ void GCS_MAVLINK::handle_imu(const mavlink_message_t *msg)
         }
     AP::ins().handle_mavlink_values(msg->msgid, accel, gyro);
     AP::compass().handle_mavlink_values(msg->msgid, mag);
-}
+} */
 
 void GCS_MAVLINK::handle_common_mission_message(mavlink_message_t *msg)
 {
