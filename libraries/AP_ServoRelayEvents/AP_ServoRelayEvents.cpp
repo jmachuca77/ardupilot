@@ -74,6 +74,8 @@ bool AP_ServoRelayEvents::do_set_relay(uint8_t relay_num, uint8_t state)
         relay->on(relay_num);
     } else if (state == 0) {
         relay->off(relay_num);
+    } else if (state == 13) {
+        relay->set_to_default(relay_num);
     } else {
         relay->toggle(relay_num);
     }

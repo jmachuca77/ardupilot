@@ -123,6 +123,13 @@ bool GCS_MAVLINK::have_flow_control(void)
  */
 void GCS_MAVLINK::handle_request_data_stream(const mavlink_message_t &msg)
 {
+    if (set_message_interval_has_been_received) {
+        // Since REQUEST_DATA_STREAM is only for legacy use, if a
+        // user's GCS is using SET_MESSAGE_INTERVAL then ignore
+        // these additional msgs so they don't override the values
+        return;
+    }
+
     mavlink_request_data_stream_t packet;
     mavlink_msg_request_data_stream_decode(&msg, &packet);
 

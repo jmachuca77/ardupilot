@@ -50,7 +50,7 @@ void Sub::init_joystick()
     gain = constrain_float(gain, 0.1, 1.0);
 }
 
-void Sub::transform_manual_control_to_rc_override(int16_t x, int16_t y, int16_t z, int16_t r, uint16_t buttons)
+void Sub::transform_manual_control_to_rc_override(int16_t x, int16_t y, int16_t z, int16_t r, uint16_t buttons, const uint16_t source)
 {
 
     float rpyScale = 0.4*gain; // Scale -1000-1000 to -400-400 with gain
@@ -109,28 +109,28 @@ void Sub::transform_manual_control_to_rc_override(int16_t x, int16_t y, int16_t 
         xTot = x + xTrim;
     }
 
-    RC_Channels::set_override(0, constrain_int16(pitchTrim + rpyCenter,1100,1900), tnow); // pitch
-    RC_Channels::set_override(1, constrain_int16(rollTrim  + rpyCenter,1100,1900), tnow); // roll
+    RC_Channels::set_override(0, source, constrain_int16(pitchTrim + rpyCenter,1100,1900), tnow); // pitch
+    RC_Channels::set_override(1, source, constrain_int16(rollTrim  + rpyCenter,1100,1900), tnow); // roll
 
-    RC_Channels::set_override(2, constrain_int16((zTot)*throttleScale+throttleBase,1100,1900), tnow); // throttle
-    RC_Channels::set_override(3, constrain_int16(r*rpyScale+rpyCenter,1100,1900), tnow);                 // yaw
+    RC_Channels::set_override(2, source, constrain_int16((zTot)*throttleScale+throttleBase,1100,1900), tnow); // throttle
+    RC_Channels::set_override(3, source, constrain_int16(r*rpyScale+rpyCenter,1100,1900), tnow);                 // yaw
 
     // maneuver mode:
     if (roll_pitch_flag == 0) {
         // adjust forward and lateral with joystick input instead of roll and pitch
-        RC_Channels::set_override(4, constrain_int16((xTot)*rpyScale+rpyCenter,1100,1900), tnow); // forward for ROV
-        RC_Channels::set_override(5, constrain_int16((yTot)*rpyScale+rpyCenter,1100,1900), tnow); // lateral for ROV
+        RC_Channels::set_override(4, source, constrain_int16((xTot)*rpyScale+rpyCenter,1100,1900), tnow); // forward for ROV
+        RC_Channels::set_override(5, source, constrain_int16((yTot)*rpyScale+rpyCenter,1100,1900), tnow); // lateral for ROV
     } else {
         // neutralize forward and lateral input while we are adjusting roll and pitch
-        RC_Channels::set_override(4, constrain_int16(xTrim*rpyScale+rpyCenter,1100,1900), tnow); // forward for ROV
-        RC_Channels::set_override(5, constrain_int16(yTrim*rpyScale+rpyCenter,1100,1900), tnow); // lateral for ROV
+        RC_Channels::set_override(4, source, constrain_int16(xTrim*rpyScale+rpyCenter,1100,1900), tnow); // forward for ROV
+        RC_Channels::set_override(5, source, constrain_int16(yTrim*rpyScale+rpyCenter,1100,1900), tnow); // lateral for ROV
     }
 
-    RC_Channels::set_override(6, cam_pan, tnow);       // camera pan
-    RC_Channels::set_override(7, cam_tilt, tnow);      // camera tilt
-    RC_Channels::set_override(8, lights1, tnow);       // lights 1
-    RC_Channels::set_override(9, lights2, tnow);       // lights 2
-    RC_Channels::set_override(10, video_switch, tnow); // video switch
+    RC_Channels::set_override(6, source, cam_pan, tnow);       // camera pan
+    RC_Channels::set_override(7, source, cam_tilt, tnow);      // camera tilt
+    RC_Channels::set_override(8, source, lights1, tnow);       // lights 1
+    RC_Channels::set_override(9, source, lights2, tnow);       // lights 2
+    RC_Channels::set_override(10, source, video_switch, tnow); // video switch
 
     // Store old x, y, z values for use in input hold logic
     x_last = x;
@@ -701,12 +701,12 @@ void Sub::default_js_buttons()
     }
 }
 
-void Sub::set_neutral_controls()
+void Sub::set_neutral_controls(const uint16_t source)
 {
     uint32_t tnow = AP_HAL::millis();
 
     for (uint8_t i = 0; i < 6; i++) {
-        RC_Channels::set_override(i, 1500, tnow);
+        RC_Channels::set_override(i, source, 1500, tnow);
     }
 
     // Clear pitch/roll trim settings

@@ -93,9 +93,16 @@ float PID::get_pid(float error, float scaler)
     _pid_info.D *= scaler;
     _pid_info.P *= scaler;
 
-    // Compute integral component if time has elapsed
-    if ((fabsf(_ki) > 0) && (dt > 0)) {
-        _integrator             += (error * _ki) * scaler * delta_time;
+    // Compute integral component if time has elapsed and not frozen
+    if (_integrator_freeze_duration_ms != 0) {
+        // integrator is frozen. If duration has expired then clear duration so next iteration will operate normally
+        if (AP_HAL::millis() - _integrator_freeze_start_ms >= _integrator_freeze_duration_ms) {
+            // duration has expired
+            _integrator_freeze_duration_ms = 0;
+        }
+    } else if ((fabsf(_ki) > 0) && (dt > 0)) {
+        _integrator += (error * _ki) * scaler * delta_time;
+
         if (_integrator < -_imax) {
             _integrator = -_imax;
         } else if (_integrator > _imax) {

@@ -335,31 +335,72 @@ bool RC_Channel::in_trim_dz() const
     return is_bounded_int32(radio_in, radio_trim - dead_zone, radio_trim + dead_zone);
 }
 
-void RC_Channel::set_override(const uint16_t v, const uint32_t timestamp_ms)
+void RC_Channel::set_override(const uint16_t v, const uint32_t source, const uint32_t timestamp_us)
 {
     if (!rc().gcs_overrides_enabled()) {
         return;
     }
 
     last_override_time = timestamp_ms != 0 ? timestamp_ms : AP_HAL::millis();
+    const uint32_t timestamp = timestamp_us != 0 ? timestamp_us : AP_HAL::millis();
+
+    switch (source) {
+    case MAVLINK_MSG_ID_RC_CHANNELS_OVERRIDE:
+        last_override_time1 = timestamp;
+        last_override_time2 = 0;
+        break;
+    case MAVLINK_MSG_ID_MANUAL_CONTROL:
+        last_override_time2 = timestamp;
+        last_override_time1 = 0;
+        break;
+    default:
+        // unknown timer
+        return;
+    }
     override_value = v;
     rc().new_override_received();
 }
 
 void RC_Channel::clear_override()
 {
-    last_override_time = 0;
-    override_value = 0;
+    if (!is_negative(rc().override_timeout1_ms())) {
+        // -1 means never timeout
+        override_value = 0;
+        last_override_time1 = 0;
+    }
+    if (!is_negative(rc().override_timeout2_ms())) {
+        // -1 means never timeout
+        override_value = 0;
+        last_override_time2 = 0;
+    }
 }
 
 bool RC_Channel::has_override() const
 {
+    uint32_t now_ms = AP_HAL::millis();
+    if (last_override_time1 > 0) {
+        const float override_timeout1_ms = rc().override_timeout1_ms();
+        if (is_negative(override_timeout1_ms)) {
+            // -1 means never timeout
+            return true;
+        }
+        return (now_ms - last_override_time1) < (uint32_t)override_timeout1_ms;
+    } else if (last_override_time2 > 0) {
+        const float override_timeout2_ms = rc().override_timeout2_ms();
+        if (is_negative(override_timeout2_ms)) {
+            // -1 means never timeout
+            return true;
+        }
+        return (now_ms - last_override_time2) < (uint32_t)override_timeout2_ms;
+    }
+
     if (override_value <= 0) {
         return false;
     }
 
-    const float override_timeout_ms = rc().override_timeout_ms();
-    return (override_timeout_ms < 0) || (is_positive(override_timeout_ms) && ((AP_HAL::millis() - last_override_time) < (uint32_t)override_timeout_ms));
+    //const float override_timeout_ms = rc().override_timeout_ms();
+    //return (override_timeout_ms < 0) || (is_positive(override_timeout_ms) && ((AP_HAL::millis() - last_override_time) < (uint32_t)override_timeout_ms));
+    return false;
 }
 
 /*

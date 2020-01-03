@@ -96,6 +96,15 @@ const AP_Param::GroupInfo AP_MotorsUGV::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("SPD_SCA_BASE", 11, AP_MotorsUGV, _speed_scale_base, 1.0f),
 
+    // @Param: THR_MAX_MAN
+    // @DisplayName: Throttle maximum in Manual
+    // @Description: Throttle maximum percentage the autopilot will apply during MANUAL mode. Use 0 to disable and use MOT_THR_MAX.
+    // @Units: %
+    // @Range: 0 100
+    // @Increment: 1
+    // @User: Standard
+    AP_GROUPINFO("THR_MAX_MAN", 30, AP_MotorsUGV, _throttle_max_manual_mode, 0),
+
     AP_GROUPEND
 };
 
@@ -186,7 +195,7 @@ void AP_MotorsUGV::set_steering(float steering, bool apply_scaling)
 }
 
 // set throttle as a value from -100 to 100
-void AP_MotorsUGV::set_throttle(float throttle)
+void AP_MotorsUGV::set_throttle(float throttle, bool is_mode_manual)
 {
     // only allow setting throttle if armed
     if (!hal.util->get_soft_armed()) {
@@ -194,7 +203,11 @@ void AP_MotorsUGV::set_throttle(float throttle)
     }
 
     // check throttle is between -_throttle_max and  +_throttle_max
-    _throttle = constrain_float(throttle, -_throttle_max, _throttle_max);
+    if (is_mode_manual && _throttle_max_manual_mode > 0) {
+        _throttle = constrain_float(throttle, -_throttle_max_manual_mode, _throttle_max_manual_mode);
+    } else {
+        _throttle = constrain_float(throttle, -_throttle_max, _throttle_max);
+    }
 }
 
 // set lateral input as a value from -100 to +100
@@ -213,6 +226,12 @@ void AP_MotorsUGV::set_mainsail(float mainsail)
 void AP_MotorsUGV::set_wingsail(float wingsail)
 {
     _wingsail = constrain_float(wingsail, -100.0f, 100.0f);
+}
+
+// set brake input as a value from 0 to 100
+void AP_MotorsUGV::set_brake(const float brake)
+{
+    _brake = constrain_float(brake, 0.0f, 100.0f);
 }
 
 // get slew limited throttle
@@ -245,6 +264,11 @@ bool AP_MotorsUGV::has_sail() const
 {
     return SRV_Channels::function_assigned(SRV_Channel::k_mainsail_sheet) || SRV_Channels::function_assigned(SRV_Channel::k_wingsail_elevator);
 }
+// true if the vehicle has brake
+bool AP_MotorsUGV::has_brake() const
+{
+    return SRV_Channels::function_assigned(SRV_Channel::k_brake);
+}
 
 void AP_MotorsUGV::output(bool armed, float ground_speed, float dt)
 {
@@ -271,6 +295,8 @@ void AP_MotorsUGV::output(bool armed, float ground_speed, float dt)
 
     // output to sails
     output_sail();
+
+    output_brake();
 
     // send values to the PWM timers for output
     SRV_Channels::calc_pwm();
@@ -466,6 +492,9 @@ void AP_MotorsUGV::setup_pwm_type()
     motor_mask |= SRV_Channels::get_output_channel_mask(SRV_Channel::k_throttle);
     motor_mask |= SRV_Channels::get_output_channel_mask(SRV_Channel::k_throttleLeft);
     motor_mask |= SRV_Channels::get_output_channel_mask(SRV_Channel::k_throttleRight);
+    motor_mask |= SRV_Channels::get_output_channel_mask(SRV_Channel::k_starter);
+    motor_mask |= SRV_Channels::get_output_channel_mask(SRV_Channel::k_ignition);
+    motor_mask |= SRV_Channels::get_output_channel_mask(SRV_Channel::k_steering);
     for (uint8_t i=0; i<_motors_num; i++) {
         motor_mask |= SRV_Channels::get_output_channel_mask(SRV_Channels::get_motor_function(i));
     }
@@ -811,6 +840,17 @@ void AP_MotorsUGV::output_sail()
     SRV_Channels::set_output_scaled(SRV_Channel::k_mainsail_sheet, _mainsail);
     SRV_Channels::set_output_scaled(SRV_Channel::k_wingsail_elevator, _wingsail);
 }
+
+// output for brake
+void AP_MotorsUGV::output_brake()
+{
+    if (!has_brake()) {
+        return;
+    }
+
+    SRV_Channels::set_output_scaled(SRV_Channel::k_brake, _brake);
+}
+
 
 // slew limit throttle for one iteration
 void AP_MotorsUGV::slew_limit_throttle(float dt)

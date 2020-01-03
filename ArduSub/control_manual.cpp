@@ -8,7 +8,7 @@ bool Sub::manual_init()
 
     // attitude hold inputs become thrust inputs in manual mode
     // set to neutral to prevent chaotic behavior (esp. roll/pitch)
-    set_neutral_controls();
+    set_neutral_controls(MAVLINK_MSG_ID_MANUAL_CONTROL);
 
     return true;
 }

@@ -105,11 +105,11 @@ void RC_Channels::clear_overrides(void)
     // copter and plane, RC_Channels needs to control failsafes to resolve this
 }
 
-void RC_Channels::set_override(const uint8_t chan, const int16_t value, const uint32_t timestamp_ms)
+void RC_Channels::set_override(const uint8_t chan, const int16_t value, const uint32_t source, const uint32_t timestamp_ms)
 {
     RC_Channels &_rc = rc();
     if (chan < NUM_RC_CHANNELS) {
-        _rc.channel(chan)->set_override(value, timestamp_ms);
+        _rc.channel(chan)->set_override(value, source, timestamp_ms);
     }
 }
 

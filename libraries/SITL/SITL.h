@@ -11,6 +11,7 @@
 #include "SIM_Buzzer.h"
 #include "SIM_Gripper_EPM.h"
 #include "SIM_Gripper_Servo.h"
+#include "SIM_ICEngine.h"
 #include "SIM_Parachute.h"
 #include "SIM_Precland.h"
 #include "SIM_Sprayer.h"
@@ -345,6 +346,7 @@ public:
 
     Gripper_Servo gripper_sim;
     Gripper_EPM gripper_epm_sim;
+    ICEngine icengine_sim;
 
     Parachute parachute_sim;
     Buzzer buzzer_sim;

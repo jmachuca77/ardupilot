@@ -39,6 +39,40 @@ void Rover::failsafe_check()
             arming.disarm(AP_Arming::Method::CPUFAILSAFE);
         }
     }
+
+    // If our PID.I is at 95% of our PID.IMAX then something is wrong.
+    if (g2.fs_pid_i_steering > 0 && arming.is_armed()) {
+        const float i = g2.attitude_control.get_steering_rate_pid().get_i();
+        const float imax = g2.attitude_control.get_steering_rate_pid().imax();
+        if (i/imax > 0.95f) {
+            // our PID.I is at 95% of our PID.IMAX. Something is wrong.
+            gcs().send_text(MAV_SEVERITY_CRITICAL, "FAILSAFE: Steering PID Integrator out of bounds");
+            arming.disarm();
+        }
+    }
+
+    if (g2.fs_pid_i_throttle > 0 && arming.is_armed()) {
+        const float i = g2.attitude_control.get_throttle_speed_pid().get_i();
+        const float imax = g2.attitude_control.get_throttle_speed_pid().imax();
+        if (i/imax > 0.95f) {
+            gcs().send_text(MAV_SEVERITY_CRITICAL, "FAILSAFE: Throttle PID Integrator out of bounds");
+            arming.disarm();
+        }
+    }
+
+}
+
+const char* Rover::failsafe_to_string(const uint8_t failsafe_type)
+{
+    switch (failsafe_type) {
+    case FAILSAFE_EVENT_THROTTLE:
+        return "Throttle";
+    case FAILSAFE_EVENT_GCS:
+        return "GCS";
+    case (FAILSAFE_EVENT_THROTTLE | FAILSAFE_EVENT_GCS):
+        return "Throttle and GCS";
+    }
+    return "Unknown Type";
 }
 
 /*
@@ -67,9 +101,10 @@ void Rover::failsafe_trigger(uint8_t failsafe_type, const char* type_str, bool o
         (failsafe.bits != 0) &&
         (millis() - failsafe.start_time > g.fs_timeout * 1000) &&
         (control_mode != &mode_rtl) &&
+        (control_mode != &mode_manual) &&
         ((control_mode != &mode_hold || (g2.fs_options & (uint32_t)Failsafe_Options::Failsafe_Option_Active_In_Hold)))) {
         failsafe.triggered = failsafe.bits;
-        gcs().send_text(MAV_SEVERITY_WARNING, "%s Failsafe", type_str);
+        gcs().send_text(MAV_SEVERITY_WARNING, "Failsafe trigger: %s", failsafe_to_string(failsafe.triggered));
 
         // clear rc overrides
         RC_Channels::clear_overrides();
@@ -84,22 +119,22 @@ void Rover::failsafe_trigger(uint8_t failsafe_type, const char* type_str, bool o
                 break;
             case Failsafe_Action_RTL:
                 if (!set_mode(mode_rtl, ModeReason::FAILSAFE)) {
-                    set_mode(mode_hold, ModeReason::FAILSAFE);
+                    set_mode(mode_manual, ModeReason::FAILSAFE);
                 }
                 break;
             case Failsafe_Action_Hold:
-                set_mode(mode_hold, ModeReason::FAILSAFE);
+                set_mode(mode_manual, ModeReason::FAILSAFE);
                 break;
             case Failsafe_Action_SmartRTL:
                 if (!set_mode(mode_smartrtl, ModeReason::FAILSAFE)) {
                     if (!set_mode(mode_rtl, ModeReason::FAILSAFE)) {
-                        set_mode(mode_hold, ModeReason::FAILSAFE);
+                        set_mode(mode_manual, ModeReason::FAILSAFE);
                     }
                 }
                 break;
             case Failsafe_Action_SmartRTL_Hold:
                 if (!set_mode(mode_smartrtl, ModeReason::FAILSAFE)) {
-                    set_mode(mode_hold, ModeReason::FAILSAFE);
+                    set_mode(mode_manual, ModeReason::FAILSAFE);
                 }
                 break;
             }
@@ -123,11 +158,11 @@ void Rover::handle_battery_failsafe(const char* type_str, const int8_t action)
                 }
                 FALLTHROUGH;
             case Failsafe_Action_Hold:
-                set_mode(mode_hold, ModeReason::BATTERY_FAILSAFE);
+                set_mode(mode_manual, ModeReason::BATTERY_FAILSAFE);
                 break;
             case Failsafe_Action_SmartRTL_Hold:
                 if (!set_mode(mode_smartrtl, ModeReason::BATTERY_FAILSAFE)) {
-                    set_mode(mode_hold, ModeReason::BATTERY_FAILSAFE);
+                    set_mode(mode_manual, ModeReason::BATTERY_FAILSAFE);
                 }
                 break;
             case Failsafe_Action_Terminate:

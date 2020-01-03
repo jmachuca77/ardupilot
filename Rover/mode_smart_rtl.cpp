@@ -6,16 +6,19 @@ bool ModeSmartRTL::_enter()
     // SmartRTL requires EKF (not DCM)
     Location ekf_origin;
     if (!ahrs.get_origin(ekf_origin)) {
+        gcs().send_text(MAV_SEVERITY_NOTICE, "Mode Change Fail: No Origin");
         return false;
     }
 
     // refuse to enter SmartRTL if smart RTL's home has not been set
     if (!g2.smart_rtl.is_active()) {
+        gcs().send_text(MAV_SEVERITY_NOTICE, "Mode Change Fail: SRTL not active");
         return false;
     }
 
     // set desired location to reasonable stopping point
     if (!g2.wp_nav.set_desired_location_to_stopping_location()) {
+        gcs().send_text(MAV_SEVERITY_NOTICE, "Mode Change Fail: No Position");
         return false;
     }
 
@@ -93,6 +96,8 @@ void ModeSmartRTL::update()
             }
             break;
     }
+
+    Mode::apply_stick_mixing_override();
 }
 
 // get desired location

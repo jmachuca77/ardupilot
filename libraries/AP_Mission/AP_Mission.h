@@ -59,7 +59,7 @@ public:
         float seconds;          // period of delay in seconds
     };
 
-    // condition delay command structure
+    // condition distance command structure
     struct PACKED Conditional_Distance_Command {
         float meters;           // distance from next waypoint in meters
     };
@@ -75,7 +75,7 @@ public:
     // change speed command structure
     struct PACKED Change_Speed_Command {
         uint8_t speed_type;     // 0=airspeed, 1=ground speed
-        float target_ms;        // target speed in m/s, -1 means no change
+        float target_ms;        // target speed in m/s, -1 means no change, -2 means apply default speed from vehicle params
         float throttle_pct;     // throttle as a percentage (i.e. 0 ~ 100), -1 means no change
     };
 
@@ -176,9 +176,10 @@ public:
 
     // DO_ENGINE_CONTROL support
     struct PACKED Do_Engine_Control {
-        bool start_control; // start or stop engine
-        bool cold_start; // use cold start procedure
+        int8_t start_control; // Off, Ignition, Run
+        int8_t cold_start;
         uint16_t height_delay_cm; // height delay for start
+        int8_t gear_state;
     };
 
     // NAV_SET_YAW_SPEED support
@@ -632,6 +633,7 @@ private:
 
     // mission items common to all vehicles:
     bool start_command_do_gripper(const AP_Mission::Mission_Command& cmd);
+    bool start_command_do_engine_control(const AP_Mission::Mission_Command& cmd);
     bool start_command_do_servorelayevents(const AP_Mission::Mission_Command& cmd);
     bool start_command_camera(const AP_Mission::Mission_Command& cmd);
     bool start_command_parachute(const AP_Mission::Mission_Command& cmd);

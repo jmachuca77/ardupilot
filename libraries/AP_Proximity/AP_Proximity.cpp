@@ -175,6 +175,23 @@ const AP_Param::GroupInfo AP_Proximity::var_info[] = {
     AP_GROUPINFO("2_YAW_CORR", 18, AP_Proximity, _yaw_correction[1], 0),
 #endif
 
+    // @Param: _MAV_TIMEOUT
+    // @DisplayName: MAVLink timeout
+    // @DisplayName: MAVLink timeout
+    // @Units: s
+    // @User: Standard
+    AP_GROUPINFO("_MAV_TIMEOUT", 19, AP_Proximity, _mavlink_timeout[0], 0.5f),
+
+#if PROXIMITY_MAX_INSTANCES > 1
+    // @Param: 2_MAV_TIMEOUT
+    // @DisplayName: MAVLink timeout
+    // @DisplayName: MAVLink timeout
+    // @Units: s
+    // @User: Standard
+    AP_GROUPINFO("2_MAV_TIMEOUT", 20, AP_Proximity, _mavlink_timeout[1], 0.5f),
+#endif
+
+
     AP_GROUPEND
 };
 
@@ -236,6 +253,20 @@ uint8_t AP_Proximity::get_orientation(uint8_t instance) const
     }
 
     return _orientation[instance].get();
+}
+
+uint32_t AP_Proximity::get_mavlink_timeout_ms(uint8_t instance) const
+{
+    if (instance >= PROXIMITY_MAX_INSTANCES) {
+        return PROXIMITY_MAV_TIMEOUT_MS;
+    }
+
+    int32_t timeout_ms = _mavlink_timeout[instance].get() * 1000;
+
+    if (timeout_ms <= 0) {
+        return PROXIMITY_MAV_TIMEOUT_MS;
+    }
+    return (uint32_t)timeout_ms;
 }
 
 // return sensor yaw correction

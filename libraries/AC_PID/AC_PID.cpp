@@ -203,6 +203,15 @@ float AC_PID::update_error(float error, bool limit)
 //  If the limit flag is set the integral is only allowed to shrink
 void AC_PID::update_i(bool limit)
 {
+    if (_integrator_freeze_duration_ms != 0) {
+        // integrator is frozen. if duration has not expired then do not re-calculate
+        if (AP_HAL::millis() - _integrator_freeze_start_ms < _integrator_freeze_duration_ms) {
+            return;
+        }
+        // duration has expired
+        _integrator_freeze_duration_ms = 0;
+    }
+
     if (!is_zero(_ki) && is_positive(_dt)) {
         // Ensure that integrator can only be reduced if the output is saturated
         if (!limit || ((is_positive(_integrator) && is_negative(_error)) || (is_negative(_integrator) && is_positive(_error)))) {
@@ -247,6 +256,7 @@ float AC_PID::get_ff(float target)
 void AC_PID::reset_I()
 {
     _integrator = 0;
+    _integrator_freeze_duration_ms = 0;
 }
 
 void AC_PID::load_gains()

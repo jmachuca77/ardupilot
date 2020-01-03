@@ -31,6 +31,10 @@
 #include <AP_Baro/AP_Baro.h>
 #include <AP_BattMonitor/AP_BattMonitor.h>          // Battery monitor library
 #include <AP_Beacon/AP_Beacon.h>
+#include <AP_BoardConfig/AP_BoardConfig.h>
+#include <AP_BoardConfig/AP_BoardConfig_CAN.h>
+#include <AP_Button/AP_Button.h>
+#include <AP_ICEngine/AP_ICEngine.h>                // Internal Combustion Engine Library
 #include <AP_Camera/AP_Camera.h>                    // Camera triggering
 #include <AP_Compass/AP_Compass.h>                  // ArduPilot Mega Magnetometer Library
 #include <AP_Declination/AP_Declination.h>          // Compass declination library
@@ -49,6 +53,7 @@
 #include <AP_Scheduler/AP_Scheduler.h>              // main loop scheduler
 #include <AP_Stats/AP_Stats.h>                      // statistics library
 #include <AP_Terrain/AP_Terrain.h>
+#include "AP_UserCustom/AP_UserCustom.h"            // Custom User class to do whatever you want
 #include <AP_Vehicle/AP_Vehicle.h>                  // needed for AHRS build
 #include <AP_WheelEncoder/AP_WheelEncoder.h>
 #include <AP_WheelEncoder/AP_WheelRateControl.h>
@@ -302,6 +307,7 @@ private:
 
     // crash_check.cpp
     void crash_check();
+    uint32_t crash_last_ms;
 
     // cruise_learn.cpp
     void cruise_learn_start();
@@ -318,6 +324,8 @@ private:
 
     // failsafe.cpp
     void failsafe_trigger(uint8_t failsafe_type, const char* type_str, bool on);
+
+    const char* failsafe_to_string(const uint8_t failsafe_type);
     void handle_battery_failsafe(const char* type_str, const int8_t action);
 #if ADVANCED_FAILSAFE == ENABLED
     void afs_fs_check(void);
@@ -366,6 +374,7 @@ private:
     void read_rangefinders(void);
     void read_airspeed();
     void rpm_update(void);
+    void proximity_update(void);
 
     // Steering.cpp
     void set_servos(void);
@@ -376,6 +385,9 @@ private:
                              uint32_t &log_bit) override;
 
     // system.cpp
+    void set_throttle(float throttle);
+    void set_brake(float brake_percent);
+    float get_emergency_brake();
     void init_ardupilot() override;
     void startup_ground(void);
     void update_ahrs_flyforward();

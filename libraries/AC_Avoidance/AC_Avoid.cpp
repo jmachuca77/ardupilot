@@ -319,12 +319,12 @@ void AC_Avoid::adjust_velocity_circle_fence(float kP, float accel_cmss, Vector2f
     const AP_AHRS &_ahrs = AP::ahrs();
 
     // get position as a 2D offset from ahrs home
-    Vector2f position_xy;
-    if (!_ahrs.get_relative_position_NE_home(position_xy)) {
+    Vector2f position_xy_cm;
+    if (!_ahrs.get_relative_position_NE_home(position_xy_cm)) {
         // we have no idea where we are....
         return;
     }
-    position_xy *= 100.0f; // m -> cm
+    position_xy_cm = position_xy_cm * 100.0f; // m -> cm
 
     // get the fence radius in cm
     const float fence_radius = _fence.get_radius() * 100.0f;
@@ -332,7 +332,7 @@ void AC_Avoid::adjust_velocity_circle_fence(float kP, float accel_cmss, Vector2f
     const float margin_cm = _fence.get_margin() * 100.0f;
 
     // get vehicle distance from home
-    const float dist_from_home = position_xy.length();
+    const float dist_from_home = position_xy_cm.length();
     if (dist_from_home > fence_radius) {
         // outside of circular fence, no velocity adjustments
         return;
@@ -341,7 +341,7 @@ void AC_Avoid::adjust_velocity_circle_fence(float kP, float accel_cmss, Vector2f
     // vehicle is inside the circular fence
     if ((AC_Avoid::BehaviourType)_behavior.get() == BEHAVIOR_SLIDE) {
         // implement sliding behaviour
-        const Vector2f stopping_point = position_xy + desired_vel_cms*(get_stopping_distance(kP, accel_cmss, desired_speed)/desired_speed);
+        const Vector2f stopping_point = position_xy_cm + desired_vel_cms*(get_stopping_distance(kP, accel_cmss, desired_speed)/desired_speed);
         const float stopping_point_dist_from_home = stopping_point.length();
         if (stopping_point_dist_from_home <= fence_radius - margin_cm) {
             // stopping before before fence so no need to adjust
@@ -351,7 +351,7 @@ void AC_Avoid::adjust_velocity_circle_fence(float kP, float accel_cmss, Vector2f
         // Project stopping point radially onto fence boundary
         // Adjusted velocity will point towards this projected point at a safe speed
         const Vector2f target_offset = stopping_point * ((fence_radius - margin_cm) / stopping_point_dist_from_home);
-        const Vector2f target_direction = target_offset - position_xy;
+        const Vector2f target_direction = target_offset - position_xy_cm;
         const float distance_to_target = target_direction.length();
         if (is_positive(distance_to_target)) {
             const float max_speed = get_max_speed(kP, accel_cmss, distance_to_target, dt);
@@ -361,25 +361,37 @@ void AC_Avoid::adjust_velocity_circle_fence(float kP, float accel_cmss, Vector2f
     } else {
         // implement stopping behaviour
         // calculate stopping point plus a margin so we look forward far enough to intersect with circular fence
-        const Vector2f stopping_point_plus_margin = position_xy + desired_vel_cms*((2.0f + margin_cm + get_stopping_distance(kP, accel_cmss, desired_speed))/desired_speed);
+        const Vector2f stopping_point_plus_margin = position_xy_cm + desired_vel_cms*((2.0f + margin_cm + get_stopping_distance(kP, accel_cmss, desired_speed))/desired_speed);
         const float stopping_point_plus_margin_dist_from_home = stopping_point_plus_margin.length();
         if (dist_from_home >= fence_radius - margin_cm) {
             // vehicle has already breached margin around fence
             // if stopping point is even further from home (i.e. in wrong direction) then adjust speed to zero
             // otherwise user is backing away from fence so do not apply limits
             if (stopping_point_plus_margin_dist_from_home >= dist_from_home) {
+                const uint32_t now_ms = AP_HAL::millis();
+                if (!desired_vel_cms.is_zero() && now_ms - notify_gcs_ms >= 1000) {
+                    notify_gcs_ms = now_ms;
+                    gcs().send_text(MAV_SEVERITY_INFO, "AVOID: Stopped vehicle!");
+                }
                 desired_vel_cms.zero();
                 _last_limit_time = AP_HAL::millis();
+                set_is_stopping_vehicle(now_ms);
             }
         } else {
             // shorten vector without adjusting its direction
             Vector2f intersection;
-            if (Vector2f::circle_segment_intersection(position_xy, stopping_point_plus_margin, Vector2f(0.0f,0.0f), fence_radius - margin_cm, intersection)) {
-                const float distance_to_target = MAX((intersection - position_xy).length() - margin_cm, 0.0f);
+            if (Vector2f::circle_segment_intersection(position_xy_cm, stopping_point_plus_margin, Vector2f(0.0f,0.0f), fence_radius - margin_cm, intersection)) {
+                const float distance_to_target = MAX((intersection - position_xy_cm).length() - margin_cm, 0.0f);
                 const float max_speed = get_max_speed(kP, accel_cmss, distance_to_target, dt);
                 if (max_speed < desired_speed) {
                     desired_vel_cms *= MAX(max_speed, 0.0f) / desired_speed;
                     _last_limit_time = AP_HAL::millis();
+                    const uint32_t now_ms = AP_HAL::millis();
+                    set_is_slowing_vehicle(now_ms);
+                    if (now_ms - notify_gcs_ms >= 1000) {
+                        notify_gcs_ms = now_ms;
+                        gcs().send_text(MAV_SEVERITY_INFO, "AVOID: Object detected, slowing vehicle");
+                    }
                 }
             }
         }
@@ -457,12 +469,12 @@ void AC_Avoid::adjust_velocity_inclusion_circles(float kP, float accel_cmss, Vec
     }
 
     // get vehicle position
-    Vector2f position_NE;
-    if (!AP::ahrs().get_relative_position_NE_origin(position_NE)) {
+    Vector2f position_NE_cm;
+    if (!AP::ahrs().get_relative_position_NE_origin(position_NE_cm)) {
         // do not limit velocity if we don't have a position estimate
         return;
     }
-    position_NE = position_NE * 100.0f;  // m to cm
+    position_NE_cm = position_NE_cm * 100.0f;  // m to cm
 
     // get the margin to the fence in cm
     const float margin_cm = fence->get_margin() * 100.0f;
@@ -485,7 +497,7 @@ void AC_Avoid::adjust_velocity_inclusion_circles(float kP, float accel_cmss, Vec
         float radius;
         if (fence->polyfence().get_inclusion_circle(i, center_pos_cm, radius)) {
             // get position relative to circle's center
-            const Vector2f position_NE_rel = (position_NE - center_pos_cm);
+            const Vector2f position_NE_rel = (position_NE_cm - center_pos_cm);
 
             // if we are outside this circle do not limit velocity for this circle
             const float dist_sq_cm = position_NE_rel.length_squared();
@@ -574,12 +586,12 @@ void AC_Avoid::adjust_velocity_exclusion_circles(float kP, float accel_cmss, Vec
     }
 
     // get vehicle position
-    Vector2f position_NE;
-    if (!AP::ahrs().get_relative_position_NE_origin(position_NE)) {
+    Vector2f position_NE_cm;
+    if (!AP::ahrs().get_relative_position_NE_origin(position_NE_cm)) {
         // do not limit velocity if we don't have a position estimate
         return;
     }
-    position_NE = position_NE * 100.0f;  // m to cm
+    position_NE_cm = position_NE_cm * 100.0f;  // m to cm
 
     // get the margin to the fence in cm
     const float margin_cm = fence->get_margin() * 100.0f;
@@ -597,7 +609,7 @@ void AC_Avoid::adjust_velocity_exclusion_circles(float kP, float accel_cmss, Vec
         float radius;
         if (fence->polyfence().get_exclusion_circle(i, center_pos_cm, radius)) {
             // get position relative to circle's center
-            const Vector2f position_NE_rel = (position_NE - center_pos_cm);
+            const Vector2f position_NE_rel = (position_NE_cm - center_pos_cm);
 
             // if we are inside this circle do not limit velocity for this circle
             const float dist_sq_cm = position_NE_rel.length_squared();
@@ -609,7 +621,7 @@ void AC_Avoid::adjust_velocity_exclusion_circles(float kP, float accel_cmss, Vec
             switch ((AC_Avoid::BehaviourType)_behavior.get()) {
                 case BEHAVIOR_SLIDE: {
                     // vector from current position to circle's center
-                    Vector2f limit_direction = center_pos_cm - position_NE;
+                    Vector2f limit_direction = center_pos_cm - position_NE_cm;
                     if (limit_direction.is_zero()) {
                         // vehicle is exactly on circle center so do not limit velocity
                         continue;
@@ -723,18 +735,18 @@ void AC_Avoid::adjust_velocity_polygon(float kP, float accel_cmss, Vector2f &des
     const AP_AHRS &_ahrs = AP::ahrs();
 
     // do not adjust velocity if vehicle is outside the polygon fence
-    Vector2f position_xy;
+    Vector2f position_xy_cm;
     if (earth_frame) {
-        if (!_ahrs.get_relative_position_NE_origin(position_xy)) {
+        if (!_ahrs.get_relative_position_NE_origin(position_xy_cm)) {
             // boundary is in earth frame but we have no idea
             // where we are
             return;
         }
-        position_xy = position_xy * 100.0f;  // m to cm
+        position_xy_cm = position_xy_cm * 100.0f;  // m to cm
     }
 
     // return if we have already breached polygon
-    const bool inside_polygon = !Polygon_outside(position_xy, boundary, num_points);
+    const bool inside_polygon = !Polygon_outside(position_xy_cm, boundary, num_points);
     if (inside_polygon != stay_inside) {
         return;
     }
@@ -755,7 +767,7 @@ void AC_Avoid::adjust_velocity_polygon(float kP, float accel_cmss, Vector2f &des
 
     // for stopping
     const float speed = safe_vel.length();
-    const Vector2f stopping_point_plus_margin = position_xy + safe_vel*((2.0f + margin_cm + get_stopping_distance(kP, accel_cmss, speed))/speed);
+    const Vector2f stopping_point_plus_margin = position_xy_cm + safe_vel*((2.0f + margin_cm + get_stopping_distance(kP, accel_cmss, speed))/speed);
 
     for (uint16_t i=0; i<num_points; i++) {
         uint16_t j = i+1;
@@ -767,7 +779,7 @@ void AC_Avoid::adjust_velocity_polygon(float kP, float accel_cmss, Vector2f &des
         Vector2f end = boundary[i];
         if ((AC_Avoid::BehaviourType)_behavior.get() == BEHAVIOR_SLIDE) {
             // vector from current position to closest point on current edge
-            Vector2f limit_direction = Vector2f::closest_point(position_xy, start, end) - position_xy;
+            Vector2f limit_direction = Vector2f::closest_point(position_xy_cm, start, end) - position_xy_cm;
             // distance to closest point
             const float limit_distance_cm = limit_direction.length();
             if (!is_zero(limit_distance_cm)) {
@@ -783,18 +795,29 @@ void AC_Avoid::adjust_velocity_polygon(float kP, float accel_cmss, Vector2f &des
         } else {
             // find intersection with line segment
             Vector2f intersection;
-            if (Vector2f::segment_intersection(position_xy, stopping_point_plus_margin, start, end, intersection)) {
+            if (Vector2f::segment_intersection(position_xy_cm, stopping_point_plus_margin, start, end, intersection)) {
                 // vector from current position to point on current edge
-                Vector2f limit_direction = intersection - position_xy;
+                Vector2f limit_direction = intersection - position_xy_cm;
                 const float limit_distance_cm = limit_direction.length();
                 if (!is_zero(limit_distance_cm)) {
+                    const uint32_t now_ms = AP_HAL::millis();
                     if (limit_distance_cm <= margin_cm) {
                         // we are within the margin so stop vehicle
+                        if (!safe_vel.is_zero() && now_ms - notify_gcs_ms >= 1000) {
+                            notify_gcs_ms = now_ms;
+                            gcs().send_text(MAV_SEVERITY_INFO, "AVOID: Stopped vehicle!");
+                        }
                         safe_vel.zero();
+                        set_is_stopping_vehicle(now_ms);
                     } else {
                         // vehicle inside the given edge, adjust velocity to not violate this edge
                         limit_direction /= limit_distance_cm;
                         limit_velocity(kP, accel_cmss, safe_vel, limit_direction, MAX(limit_distance_cm - margin_cm, 0.0f), dt);
+                        set_is_slowing_vehicle(now_ms);
+                        if (now_ms - notify_gcs_ms >= 1000) {
+                            notify_gcs_ms = now_ms;
+                            gcs().send_text(MAV_SEVERITY_INFO, "AVOID: Object detected, slowing vehicle");
+                        }
                     }
                 } else {
                     // We are exactly on the edge - treat this as a fence breach.

@@ -9,6 +9,8 @@
  */
 void Plane::set_next_WP(const struct Location &loc)
 {
+    g2.ice_control.mode_change_or_new_autoNav_point_event(plane.auto_navigation_mode);
+
     if (auto_state.next_wp_crosstrack) {
         // copy the current WP into the OldWP slot
         prev_WP_loc = next_WP_loc;

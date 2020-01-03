@@ -296,6 +296,7 @@ bool AP_Mission::verify_command(const Mission_Command& cmd)
     case MAV_CMD_DO_DIGICAM_CONFIGURE:
     case MAV_CMD_DO_DIGICAM_CONTROL:
     case MAV_CMD_DO_SET_CAM_TRIGG_DIST:
+    case MAV_CMD_DO_ENGINE_CONTROL:
     case MAV_CMD_DO_PARACHUTE:
     case MAV_CMD_DO_SET_RESUME_REPEAT_DIST:
         return true;
@@ -329,6 +330,8 @@ bool AP_Mission::start_command(const Mission_Command& cmd)
         return start_command_parachute(cmd);
     case MAV_CMD_DO_SET_RESUME_REPEAT_DIST:
         return command_do_set_repeat_dist(cmd);
+    case MAV_CMD_DO_ENGINE_CONTROL:
+        return start_command_do_engine_control(cmd);
     default:
         return _cmd_start_fn(cmd);
     }
@@ -780,7 +783,7 @@ MAV_MISSION_RESULT AP_Mission::mavlink_int_to_mission_cmd(const mavlink_mission_
 
         cmd.p1 = (passby << 8) | (acp & 0x00FF);
 #else
-        // delay at waypoint in seconds (this is for copters???)
+        // delay at waypoint in seconds.
         cmd.p1 = packet.param1;
 #endif
     }
@@ -993,9 +996,10 @@ MAV_MISSION_RESULT AP_Mission::mavlink_int_to_mission_cmd(const mavlink_mission_
         break;
 
     case MAV_CMD_DO_ENGINE_CONTROL:
-        cmd.content.do_engine_control.start_control = (packet.param1>0);
-        cmd.content.do_engine_control.cold_start = (packet.param2>0);
+        cmd.content.do_engine_control.start_control = packet.param1;
+        cmd.content.do_engine_control.cold_start = packet.param2;
         cmd.content.do_engine_control.height_delay_cm = packet.param3*100;
+        cmd.content.do_engine_control.gear_state = packet.param4;
         break;        
 
     case MAV_CMD_NAV_PAYLOAD_PLACE:
@@ -1433,9 +1437,10 @@ bool AP_Mission::mission_cmd_to_mavlink_int(const AP_Mission::Mission_Command& c
         break;
 
     case MAV_CMD_DO_ENGINE_CONTROL:
-        packet.param1 = cmd.content.do_engine_control.start_control?1:0;
-        packet.param2 = cmd.content.do_engine_control.cold_start?1:0;
+        packet.param1 = cmd.content.do_engine_control.start_control;
+        packet.param2 = cmd.content.do_engine_control.cold_start;
         packet.param3 = cmd.content.do_engine_control.height_delay_cm*0.01f;
+        packet.param4 = cmd.content.do_engine_control.gear_state;
         break;        
 
     case MAV_CMD_NAV_PAYLOAD_PLACE:

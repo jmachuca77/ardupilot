@@ -231,6 +231,11 @@ class VehicleInfo(object):
             "last_letter": {
                 "waf_target": "bin/arduplane",
             },
+            "ice": {
+                "waf_target": "bin/arduplane",
+                "default_params_filename": ["default_params/plane.parm",
+                                            "default_params/ice.parm"],
+            },
             "CRRCSim": {
                 "waf_target": "bin/arduplane",
             },
@@ -276,6 +281,11 @@ class VehicleInfo(object):
                 "waf_target": "bin/ardurover",
                 "default_params_filename": ["default_params/rover.parm",
                                             "default_params/sailboat-motor.parm"],
+            },
+            "rover-ice": {
+                "waf_target": "bin/ardurover",
+                "default_params_filename": ["default_params/rover.parm",
+                                            "default_params/ice.parm"],
             },
             "gazebo-rover": {
                 "waf_target": "bin/ardurover",

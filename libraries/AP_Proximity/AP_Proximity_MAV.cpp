@@ -20,14 +20,26 @@
 
 extern const AP_HAL::HAL& hal;
 
-#define PROXIMITY_MAV_TIMEOUT_MS    500 // distance messages must arrive within this many milliseconds
+/* 
+   The constructor also initialises the proximity sensor. Note that this
+   constructor is not called until detect() returns true, so we
+   already know that we should setup the proximity sensor
+*/
+AP_Proximity_MAV::AP_Proximity_MAV(AP_Proximity &_frontend,
+                                   AP_Proximity::Proximity_State &_state) :
+    AP_Proximity_Backend(_frontend, _state)
+{
+}
 
 // update the state of the sensor
 void AP_Proximity_MAV::update(void)
 {
+    const uint32_t now_ms = AP_HAL::millis();
+    const uint32_t timeout_ms = frontend.get_mavlink_timeout_ms(state.instance);
+
     // check for timeout and set health status
-    if ((_last_update_ms == 0 || (AP_HAL::millis() - _last_update_ms > PROXIMITY_MAV_TIMEOUT_MS)) &&
-        (_last_upward_update_ms == 0 || (AP_HAL::millis() - _last_upward_update_ms > PROXIMITY_MAV_TIMEOUT_MS))) {
+    if ((_last_update_ms == 0 || (now_ms - _last_update_ms > timeout_ms)) &&
+        (_last_upward_update_ms == 0 || (now_ms - _last_upward_update_ms > timeout_ms))) {
         set_status(AP_Proximity::Status::NoData);
     } else {
         set_status(AP_Proximity::Status::Good);
@@ -37,7 +49,7 @@ void AP_Proximity_MAV::update(void)
 // get distance upwards in meters. returns true on success
 bool AP_Proximity_MAV::get_upward_distance(float &distance) const
 {
-    if ((_last_upward_update_ms != 0) && (AP_HAL::millis() - _last_upward_update_ms <= PROXIMITY_MAV_TIMEOUT_MS)) {
+    if ((_last_upward_update_ms != 0) && (AP_HAL::millis() - _last_upward_update_ms <= frontend.get_mavlink_timeout_ms(state.instance))) {
         distance = _distance_upward;
         return true;
     }

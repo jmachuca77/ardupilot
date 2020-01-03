@@ -27,6 +27,8 @@ extern const AP_HAL::HAL& hal;
 void SRV_Channel::output_ch(void)
 {
     int8_t passthrough_from = -1;
+    bool isRcinPassthroughChannel = false;
+
 
     // take care of special function cases
     switch(function)
@@ -36,6 +38,7 @@ void SRV_Channel::output_ch(void)
         break;
     case k_rcin1 ... k_rcin16: // rc pass-thru
         passthrough_from = int8_t(function - k_rcin1);
+        isRcinPassthroughChannel = true;
         break;
     }
     if (passthrough_from != -1) {
@@ -46,7 +49,9 @@ void SRV_Channel::output_ch(void)
                 output_pwm = c->get_radio_trim();
             } else {
                 const int16_t radio_in = c->get_radio_in();
-                if (!ign_small_rcin_changes) {
+                if (isRcinPassthroughChannel && !c->has_override() && radio_in == 0 && (SRV_Channels::get_singleton()->get_options() & SRV_Channel::OptionsMask::RCIN_PASSTHROUGH_DEFAULT_IS_TRIM)) {
+                    output_pwm = servo_trim;
+                } else if (!ign_small_rcin_changes) {
                     output_pwm = radio_in;
                     previous_radio_in = radio_in;
                 } else {
@@ -132,6 +137,10 @@ void SRV_Channel::aux_servo_function_setup(void)
     case k_throttle:
     case k_throttleLeft:
     case k_throttleRight:
+    case k_ignition:
+    case k_starter:
+    case k_brake:
+    case k_engine_gear:
         // fixed wing throttle
         set_range(100);
         break;
@@ -604,6 +613,26 @@ bool SRV_Channels::get_output_pwm(SRV_Channel::Aux_servo_function_t function, ui
     channels[chan].calc_pwm(functions[function].output_scaled);
     value = channels[chan].output_pwm;
     return true;
+}
+
+// set output pwm to min for the given function
+void SRV_Channels::set_output_to_min(SRV_Channel::Aux_servo_function_t function)
+{
+   for (uint8_t i=0; i<NUM_SERVO_CHANNELS; i++) {
+        if (channels[i].function == function) {
+            channels[i].set_output_pwm(channels[i].servo_min);
+        }
+    }
+}
+
+// set output pwm to max for the given function
+void SRV_Channels::set_output_to_max(SRV_Channel::Aux_servo_function_t function)
+{
+   for (uint8_t i=0; i<NUM_SERVO_CHANNELS; i++) {
+        if (channels[i].function == function) {
+            channels[i].set_output_pwm(channels[i].servo_max);
+        }
+    }
 }
 
 // set output pwm to trim for the given function

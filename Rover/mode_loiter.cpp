@@ -5,6 +5,7 @@ bool ModeLoiter::_enter()
 {
     // set _destination to reasonable stopping point
     if (!g2.wp_nav.get_stopping_location(_destination)) {
+        gcs().send_text(MAV_SEVERITY_NOTICE, "Mode Change Fail: No Position");
         return false;
     }
 
@@ -57,7 +58,9 @@ void ModeLoiter::update()
     }
 
     // run steering and throttle controllers
+    Mode::apply_stick_mixing_override();
     calc_steering_to_heading(_desired_yaw_cd);
+
     calc_throttle(_desired_speed, true);
 }
 

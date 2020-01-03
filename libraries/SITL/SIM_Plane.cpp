@@ -80,6 +80,7 @@ Plane::Plane(const char *frame_str) :
         thrust_scale *= 1.5;
     }
 
+    // CHECK undefined?
     if (strstr(frame_str, "-ice")) {
         ice_engine = true;
     }
@@ -306,11 +307,8 @@ void Plane::calculate_forces(const struct sitl_input &input, Vector3f &rot_accel
         throttle = filtered_servo_range(input, 2);
     }
     
-    float thrust     = throttle;
-
-    if (ice_engine) {
-        thrust = icengine.update(input);
-    }
+    float thrust = throttle;
+    icengine->update(input, thrust);
 
     // calculate angle of attack
     angle_of_attack = atan2f(velocity_air_bf.z, velocity_air_bf.x);

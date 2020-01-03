@@ -92,6 +92,7 @@ COMMON_VEHICLE_DEPENDENT_LIBRARIES = [
     'AP_ADSB',
     'AC_PID',
     'AP_SerialLED',
+    'AP_UserCustom',
     'AP_EFI',
     'AP_Hott_Telem',
     'AP_ESC_Telem',

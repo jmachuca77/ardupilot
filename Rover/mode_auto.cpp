@@ -7,12 +7,13 @@ bool ModeAuto::_enter()
 {
     // fail to enter auto if no mission commands
     if (mission.num_commands() <= 1) {
-        gcs().send_text(MAV_SEVERITY_NOTICE, "No Mission. Can't set AUTO.");
+        gcs().send_text(MAV_SEVERITY_NOTICE, "Mode Change Fail: No Mission");
         return false;
     }
 
     // init location target
     if (!g2.wp_nav.set_desired_location(rover.current_loc)) {
+        gcs().send_text(MAV_SEVERITY_NOTICE, "Mode Change Fail: No Position");
         return false;
     }
 
@@ -43,7 +44,7 @@ void ModeAuto::update()
     switch (_submode) {
         case Auto_WP:
         {
-            if (!g2.wp_nav.reached_destination()) {
+            if (!reached_destination()) {
                 // update navigation controller
                 navigate_to_waypoint();
             } else {
@@ -102,6 +103,9 @@ void ModeAuto::update()
             stop_vehicle();
             break;
     }
+
+    Mode::apply_stick_mixing_override();
+    rover.g2.ice_control.set_is_waiting_in_auto(is_waiting());
 }
 
 void ModeAuto::calc_throttle(float target_speed, bool avoidance_enabled)
@@ -178,24 +182,24 @@ bool ModeAuto::set_desired_location(const struct Location& destination, float ne
 // return true if vehicle has reached or even passed destination
 bool ModeAuto::reached_destination() const
 {
-    switch (_submode) {
+   switch (_submode) {
     case Auto_WP:
         return g2.wp_nav.reached_destination();
-        break;
+
     case Auto_HeadingAndSpeed:
     case Auto_Stop:
         // always return true because this is the safer option to allow missions to continue
         return true;
-        break;
+
     case Auto_RTL:
         return rover.mode_rtl.reached_destination();
-        break;
+
     case Auto_Loiter:
         return rover.mode_loiter.reached_destination();
-        break;
+
     case Auto_Guided:
         return rover.mode_guided.reached_destination();
-        break;
+
     }
 
     // we should never reach here but just in case, return true to allow missions to continue
@@ -559,6 +563,8 @@ bool ModeAuto::do_nav_wp(const AP_Mission::Mission_Command& cmd, bool always_sto
     // this is the delay, stored in seconds
     loiter_duration = cmd.p1;
 
+    g2.ice_control.mode_change_or_new_autoNav_point_event(is_autopilot_mode());
+
     return true;
 }
 
@@ -759,9 +765,12 @@ bool ModeAuto::verify_within_distance()
 
 void ModeAuto::do_change_speed(const AP_Mission::Mission_Command& cmd)
 {
-    // set speed for active mode
-    if (set_desired_speed(cmd.content.speed.target_ms)) {
-        gcs().send_text(MAV_SEVERITY_INFO, "speed: %.1f m/s", static_cast<double>(cmd.content.speed.target_ms));
+    float speed = cmd.content.speed.target_ms;
+    if (is_equal(speed, -2.0f)) {
+        speed = get_speed_default(false);
+    }
+    if (speed > 0 && set_desired_speed(speed)) {
+        gcs().send_text(MAV_SEVERITY_INFO, "Set speed: %.1f m/s", static_cast<double>(speed));
     }
 }
 

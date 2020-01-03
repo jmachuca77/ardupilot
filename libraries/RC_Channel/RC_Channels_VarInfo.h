@@ -76,11 +76,11 @@ const AP_Param::GroupInfo RC_Channels::var_info[] = {
 
     // @Param: _OVERRIDE_TIME
     // @DisplayName: RC override timeout
-    // @Description: Timeout after which RC overrides will no longer be used, and RC input will resume, 0 will disable RC overrides, -1 will never timeout, and continue using overrides until they are disabled
+    // @Description: Timeout after which MAVLink msg MANUAL_CONTROL overrides will no longer be used, and RC input will resume, 0 will disable RC overrides, -1 will never timeout, and continue using overrides until they are disabled
     // @User: Advanced
-    // @Range: 0.0 120.0
+    // @Range: -1.0 120.0
     // @Units: s
-    AP_GROUPINFO("_OVERRIDE_TIME", 32, RC_CHANNELS_SUBCLASS, _override_timeout, 3.0),
+    AP_GROUPINFO("_OVERRIDE_TIME", 32, RC_CHANNELS_SUBCLASS, _override_timeout1, 3.0),
 
     // @Param: _OPTIONS
     // @DisplayName: RC options
@@ -88,6 +88,14 @@ const AP_Param::GroupInfo RC_Channels::var_info[] = {
     // @User: Advanced
     // @Bitmask: 0:Ignore RC Receiver, 1:Ignore MAVLink Overrides, 2:Ignore Receiver Failsafe, 3:FPort Pad, 4:Log RC input bytes, 5:Arming check throttle for 0 input, 6:Skip the arming check for neutral Roll/Pitch/Yay sticks
     AP_GROUPINFO("_OPTIONS", 33, RC_CHANNELS_SUBCLASS, _options, 0),
+
+    // @Param: _OVERRIDE_TIM2
+    // @DisplayName: RC override timeout
+    // @Description: Timeout after which MAVLink msg RC_CHANNELS_OVERRIDE overrides will no longer be used, and RC input will resume, 0 will disable RC overrides, -1 will never timeout, and continue using overrides until they are disabled
+    // @User: Advanced
+    // @Range: -1.0 120.0
+    // @Units: s
+    AP_GROUPINFO("_OVERRIDE_TIM2", 34, RC_CHANNELS_SUBCLASS, _override_timeout2, 3.0),
 
     AP_GROUPEND
 };

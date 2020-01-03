@@ -5,6 +5,7 @@ bool ModeGuided::_enter()
 {
     // set desired location to reasonable stopping point
     if (!g2.wp_nav.set_desired_location_to_stopping_location()) {
+        gcs().send_text(MAV_SEVERITY_NOTICE, "Mode Change Fail: No Position");
         return false;
     }
     _guided_mode = Guided_WP;
@@ -31,6 +32,7 @@ void ModeGuided::update()
                 if (!sent_notification) {
                     sent_notification = true;
                     rover.gcs().send_mission_item_reached_message(0);
+                    rover.gcs().send_text(MAV_SEVERITY_INFO, "Guided: Reached destination");
                 }
 
                 // we have reached the destination so stay here
@@ -78,15 +80,7 @@ void ModeGuided::update()
                 gcs().send_text(MAV_SEVERITY_WARNING, "target not received last 3secs, stopping");
                 have_attitude_target = false;
             }
-            if (have_attitude_target) {
-                // run steering and throttle controllers
-                float steering_out = attitude_control.get_steering_out_rate(radians(_desired_yaw_rate_cds / 100.0f),
-                                                                            g2.motors.limit.steer_left,
-                                                                            g2.motors.limit.steer_right,
-                                                                            rover.G_Dt);
-                set_steering(steering_out * 4500.0f);
-                calc_throttle(calc_speed_nudge(_desired_speed, is_negative(_desired_speed)), true);
-            } else {
+            if (!have_attitude_target) {
                 // we have reached the destination so stay here
                 if (rover.is_boat()) {
                     if (!start_loiter()) {
@@ -95,6 +89,14 @@ void ModeGuided::update()
                 } else {
                     stop_vehicle();
                 }
+            } else if (!_stick_mixing.is_active()) {
+                // run steering and throttle controllers
+                float steering_out = attitude_control.get_steering_out_rate(radians(_desired_yaw_rate_cds / 100.0f),
+                                                                            g2.motors.limit.steer_left,
+                                                                            g2.motors.limit.steer_right,
+                                                                            rover.G_Dt);
+                set_steering(steering_out * 4500.0f);
+                calc_throttle(calc_speed_nudge(_desired_speed, is_negative(_desired_speed)), true);
             }
             break;
         }
@@ -109,6 +111,9 @@ void ModeGuided::update()
             gcs().send_text(MAV_SEVERITY_WARNING, "Unknown GUIDED mode");
             break;
     }
+
+    Mode::apply_stick_mixing_override();
+    rover.g2.ice_control.set_is_waiting_in_auto(is_waiting());
 }
 
 // return distance (in meters) to destination
@@ -133,7 +138,7 @@ bool ModeGuided::reached_destination() const
 {
     switch (_guided_mode) {
     case Guided_WP:
-        return _reached_destination;
+        return g2.wp_nav.reached_destination();
     case Guided_HeadingAndSpeed:
     case Guided_TurnRateAndSpeed:
     case Guided_Loiter:
@@ -196,6 +201,7 @@ bool ModeGuided::set_desired_location(const struct Location& destination,
         // handle guided specific initialisation and logging
         _guided_mode = ModeGuided::Guided_WP;
         sent_notification = false;
+        g2.ice_control.mode_change_or_new_autoNav_point_event(is_autopilot_mode());
         rover.Log_Write_GuidedTarget(_guided_mode, Vector3f(destination.lat, destination.lng, 0), Vector3f(g2.wp_nav.get_desired_speed(), 0.0f, 0.0f));
         return true;
     }

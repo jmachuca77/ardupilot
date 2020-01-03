@@ -191,7 +191,7 @@ void Sub::failsafe_pilot_input_check()
     AP::logger().Write_Error(LogErrorSubsystem::PILOT_INPUT, LogErrorCode::FAILSAFE_OCCURRED);
     gcs().send_text(MAV_SEVERITY_CRITICAL, "Lost manual control");
 
-    set_neutral_controls();
+    set_neutral_controls(MAVLINK_MSG_ID_MANUAL_CONTROL);
 
     if(g.failsafe_pilot_input == FS_PILOT_INPUT_DISARM) {
         arming.disarm(AP_Arming::Method::PILOT_INPUT_FAILSAFE);

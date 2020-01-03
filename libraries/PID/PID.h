@@ -96,6 +96,11 @@ public:
         return _integrator;
     }
 
+    void freeze_integrator(uint32_t duration_ms) {
+        _integrator_freeze_duration_ms = duration_ms;
+        _integrator_freeze_start_ms = AP_HAL::millis();
+    }
+
     static const struct AP_Param::GroupInfo        var_info[];
 
     const AP_Logger::PID_Info& get_pid_info(void) const { return _pid_info; }
@@ -107,6 +112,8 @@ private:
     AP_Int16        _imax;
 
     float           _integrator;///< integrator value
+    uint32_t        _integrator_freeze_start_ms;///< timestamp of start of integrator freeze.
+    uint32_t        _integrator_freeze_duration_ms;///< duration of how long we will freeze integrator re-calculations. Zero means disabled, normal operation
     float           _last_error;///< last error for derivative
     float           _last_derivative;///< last derivative for low-pass filter
     uint32_t        _last_t;///< last time get_pid() was called in millis

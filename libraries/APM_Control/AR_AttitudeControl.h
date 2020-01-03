@@ -34,6 +34,11 @@
 #define AR_ATTCONTROL_HEEL_SAIL_IMAX    1.0f
 #define AR_ATTCONTROL_HEEL_SAIL_FILT    10.0f
 #define AR_ATTCONTROL_DT                0.02f
+#define AR_ATTCONTROL_BRAKE_P           0.20f
+#define AR_ATTCONTROL_BRAKE_I           0.20f
+#define AR_ATTCONTROL_BRAKE_IMAX        1.00f
+#define AR_ATTCONTROL_BRAKE_D           0.00f
+#define AR_ATTCONTROL_BRAKE_FILT        10.00f
 
 // throttle/speed control maximum acceleration/deceleration (in m/s) (_ACCEL_MAX parameter default)
 #define AR_ATTCONTROL_THR_ACCEL_MAX     2.00f
@@ -95,14 +100,14 @@ public:
     //   forward/back deceleartion max in m/s/s
     void set_throttle_limits(float throttle_accel_max, float throttle_decel_max);
 
-    // return a throttle output from -1 to +1 given a desired speed in m/s (use negative speeds to travel backwards)
+    // calculate a throttle output from -1 to +1, and a brake value from 0 to +1 given a desired speed in m/s (use negative speeds to travel backwards and/or apply brakes)
     //   desired_speed argument should already have been passed through get_desired_speed_accel_limited function
     //   motor_limit should be true if motors have hit their upper or lower limits
     //   cruise speed should be in m/s, cruise throttle should be a number from -1 to +1
-    float get_throttle_out_speed(float desired_speed, bool motor_limit_low, bool motor_limit_high, float cruise_speed, float cruise_throttle, float dt);
+    void get_throttle_and_brake_out_speed(float desired_speed, bool motor_limit_low, bool motor_limit_high, float cruise_speed, float cruise_throttle, float dt, float &throttle_out, float &brake_out);
 
-    // return a throttle output from -1 to +1 to perform a controlled stop.  stopped is set to true once stop has been completed
-    float get_throttle_out_stop(bool motor_limit_low, bool motor_limit_high, float cruise_speed, float cruise_throttle, float dt, bool &stopped);
+    // calculate a throttle output from -1 to +1 and a brake from 0 to +1 to perform a controlled stop. Stopped is set to true once stop has been completed
+    void get_throttle_and_brake_out_stop(bool motor_limit_low, bool motor_limit_high, float cruise_speed, float cruise_throttle, float dt, bool &stopped, float &throttle_out, float &brake_out);
 
     // balancebot pitch to throttle controller
     // returns a throttle output from -100 to +100 given a desired pitch angle and vehicle's current speed (from wheel encoders)
@@ -140,6 +145,12 @@ public:
     // get acceleration limited desired speed
     float get_desired_speed_accel_limited(float desired_speed, float dt) const;
 
+    // get brake gain. Used by non-throttle modes to handle braking
+    float get_brake_gain() const { return _brake_gain; }
+
+    // get brake gain. Used by non-throttle modes to handle braking
+    uint8_t get_brake_manual_pct() const { return (uint8_t)constrain_int16(_brake_manual_percent,0,100); }
+
     // get minimum stopping distance (in meters) given a speed (in m/s)
     float get_stopping_distance(float speed) const;
 
@@ -164,6 +175,8 @@ private:
     AP_Float _throttle_accel_max;   // speed/throttle control acceleration (and deceleration) maximum in m/s/s.  0 to disable limits
     AP_Float _throttle_decel_max;    // speed/throttle control deceleration maximum in m/s/s. 0 to use ATC_ACCEL_MAX for deceleration
     AP_Int8  _brake_enable;         // speed control brake enable/disable. if set to 1 a reversed output to the motors to slow the vehicle.
+    AP_Float _brake_gain;           // brake speed controller P gain
+    AP_Int8  _brake_manual_percent; // brake percent when zero throttle in MANAUAL mode
     AP_Float _stop_speed;           // speed control stop speed.  Motor outputs to zero once vehicle speed falls below this value
     AP_Float _steer_accel_max;      // steering angle acceleration max in deg/s/s
     AP_Float _steer_rate_max;       // steering rate control maximum rate in deg/s

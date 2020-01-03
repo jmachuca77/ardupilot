@@ -18,30 +18,28 @@
 
 #pragma once
 
-#include "SIM_Aircraft.h"
+#include <AP_Param/AP_Param.h>
+#include "SITL_Input.h"
 
 namespace SITL {
 
 class ICEngine {
 public:
-    const uint8_t throttle_servo;
-    const int8_t choke_servo;
-    const int8_t ignition_servo;
-    const int8_t starter_servo;
-    const float slew_rate; // percent-per-second
+    ICEngine() {
+        AP_Param::setup_object_defaults(this, var_info);
+    };
 
-    ICEngine(uint8_t _throttle, int8_t _choke, int8_t _ignition, int8_t _starter, float _slew_rate) :
-        throttle_servo(_throttle),
-        choke_servo(_choke),
-        ignition_servo(_ignition),
-        starter_servo(_starter),
-        slew_rate(_slew_rate)
-    {}
+    const float slew_rate = 100; // percent-per-second
 
-    // update motor state
-    float update(const struct sitl_input &input);
+    static const struct AP_Param::GroupInfo var_info[];
+
+    // update motor state and update throttle
+    void update(const struct sitl_input &input, float &throttle_demand);
 
 private:
+
+    AP_Int8 rpm_fail;
+
     float last_output;
     uint64_t start_time_us;
     uint64_t last_update_us;

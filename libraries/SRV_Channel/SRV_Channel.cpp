@@ -203,3 +203,9 @@ bool SRV_Channel::should_e_stop(SRV_Channel::Aux_servo_function_t function)
             (function >= SRV_Channel::k_boost_throttle && function <= SRV_Channel::k_motor12) ||
             function == k_engine_run_enable);
 }
+
+// return true if function is an rcin passthrough
+bool SRV_Channel::is_rcin_passthrough(SRV_Channel::Aux_servo_function_t function)
+{
+    return (function >= SRV_Channel::k_rcin1 && function <= SRV_Channel::k_rcin16);
+}

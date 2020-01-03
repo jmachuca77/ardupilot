@@ -335,6 +335,23 @@ const AP_Param::GroupInfo AR_AttitudeControl::var_info[] = {
     // @User: Standard
     AP_SUBGROUPINFO(_sailboat_heel_pid, "_SAIL_", 12, AR_AttitudeControl, AC_PID),
 
+    // @Param: _BRAKE_GAIN
+    // @DisplayName: Speed control brake gain
+    // @Description: Speed control brake gain where high means more braking
+    // @Range: 0.01 10.0
+    // @Increment: 0.1
+    // @User: Standard
+    AP_GROUPINFO("_BRAKE_GAIN", 14, AR_AttitudeControl, _brake_gain, 1.0f),
+
+    // @Param: _BRAKE_MANUAL
+    // @DisplayName: Speed control MANUAL brake percent
+    // @Description: Speed control percent applied to brakes in MANUAL mode while zero throttle is applied
+    // @Range: 0 100
+    // @Unit: percent
+    // @Increment: 1
+    // @User: Standard
+    AP_GROUPINFO("_BRAKE_MANUAL", 15, AR_AttitudeControl, _brake_manual_percent, 0),
+
     AP_GROUPEND
 };
 
@@ -484,7 +501,7 @@ float AR_AttitudeControl::get_turn_rate_from_lat_accel(float lat_accel, float sp
 // return a throttle output from -1 to +1 given a desired speed in m/s (use negative speeds to travel backwards)
 //   motor_limit should be true if motors have hit their upper or lower limits
 //   cruise speed should be in m/s, cruise throttle should be a number from -1 to +1
-float AR_AttitudeControl::get_throttle_out_speed(float desired_speed, bool motor_limit_low, bool motor_limit_high, float cruise_speed, float cruise_throttle, float dt)
+void AR_AttitudeControl::get_throttle_and_brake_out_speed(float desired_speed, bool motor_limit_low, bool motor_limit_high, float cruise_speed, float cruise_throttle, float dt, float &throttle_out, float &brake_out)
 {
     // sanity check dt
     dt = constrain_float(dt, 0.0f, 1.0f);
@@ -494,7 +511,9 @@ float AR_AttitudeControl::get_throttle_out_speed(float desired_speed, bool motor
     if (!get_forward_speed(speed)) {
         // we expect caller will not try to control heading using rate control without a valid speed estimate
         // on failure to get speed we do not attempt to steer
-        return 0.0f;
+        throttle_out = 0;
+        brake_out = 0;
+        return;
     }
 
     // if not called recently, reset input filter and desired speed to actual speed (used for accel limiting)
@@ -518,9 +537,17 @@ float AR_AttitudeControl::get_throttle_out_speed(float desired_speed, bool motor
     }
 
     // calculate final output
-    float throttle_out = _throttle_speed_pid.update_all(desired_speed, speed, (_throttle_limit_low || _throttle_limit_high));
+    throttle_out = _throttle_speed_pid.update_all(desired_speed, speed, (_throttle_limit_low || _throttle_limit_high));
     throttle_out += _throttle_speed_pid.get_ff();
     throttle_out += throttle_base;
+
+    // final output throttle in range -1 to 1
+    if (throttle_out > 0) {
+        brake_out = 0;
+    } else {
+        // braking is like negative thrust!
+        brake_out = -1 * throttle_out * _brake_gain;
+    }
 
     // clear local limit flags used to stop i-term build-up as we stop reversed outputs going to motors
     _throttle_limit_low = false;
@@ -537,13 +564,10 @@ float AR_AttitudeControl::get_throttle_out_speed(float desired_speed, bool motor
             _throttle_limit_high = true;
         }
     }
-
-    // final output throttle in range -1 to 1
-    return throttle_out;
 }
 
 // return a throttle output from -1 to +1 to perform a controlled stop.  returns true once the vehicle has stopped
-float AR_AttitudeControl::get_throttle_out_stop(bool motor_limit_low, bool motor_limit_high, float cruise_speed, float cruise_throttle, float dt, bool &stopped)
+void AR_AttitudeControl::get_throttle_and_brake_out_stop(bool motor_limit_low, bool motor_limit_high, float cruise_speed, float cruise_throttle, float dt, bool &stopped, float &throttle_out, float &brake_out)
 {
     // get current system time
     const uint32_t now = AP_HAL::millis();
@@ -575,13 +599,15 @@ float AR_AttitudeControl::get_throttle_out_stop(bool motor_limit_low, bool motor
         _stop_last_ms = now;
         // set last time speed controller was run so accelerations are limited
         _speed_last_ms = now;
-        return 0.0f;
+        throttle_out = 0;
+        brake_out = 0;
+        return;
     }
 
     // clear stopped system time
     _stop_last_ms = 0;
     // run speed controller to bring vehicle to stop
-    return get_throttle_out_speed(desired_speed_limited, motor_limit_low, motor_limit_high, cruise_speed, cruise_throttle, dt);
+    get_throttle_and_brake_out_speed(desired_speed_limited, motor_limit_low, motor_limit_high, cruise_speed, cruise_throttle, dt, throttle_out, brake_out);
 }
 
 // balancebot pitch to throttle controller

@@ -29,6 +29,7 @@
 #include <AP_Airspeed/AP_Airspeed.h>
 #include <AP_Camera/AP_Camera.h>
 #include <AP_Gripper/AP_Gripper.h>
+#include <AP_ICEngine/AP_ICEngine.h>
 #include <AP_BLHeli/AP_BLHeli.h>
 #include <AP_RSSI/AP_RSSI.h>
 #include <AP_RTC/AP_RTC.h>
@@ -37,6 +38,7 @@
 #include <AP_Mount/AP_Mount.h>
 #include <AP_Common/AP_FWVersion.h>
 #include <AP_VisualOdom/AP_VisualOdom.h>
+#include "AP_UserCustom/AP_UserCustom.h"
 #include <AP_OpticalFlow/OpticalFlow.h>
 #include <AP_Baro/AP_Baro.h>
 #include <AP_EFI/AP_EFI.h>
@@ -583,6 +585,24 @@ void GCS_MAVLINK::send_text(MAV_SEVERITY severity, const char *fmt, ...) const
     va_start(arg_list, fmt);
     gcs().send_textv(severity, fmt, arg_list, (1<<chan));
     va_end(arg_list);
+}
+
+// same as send_text() but will accept a reference to a uint32 timestamp reference that it will use to rate-limit the output.
+// Any attempts to send faster will be dropped. Useful when debugging high-rate loops or events that may cause spurious repeat spam
+void GCS_MAVLINK::send_text_rate_limited(MAV_SEVERITY severity, const uint32_t interval_ms, uint32_t &ref_to_timetime_ms, const char *fmt, ...) const
+{
+    const uint32_t now_ms = AP_HAL::millis();
+    if (now_ms - ref_to_timetime_ms < interval_ms) {
+        return;
+    }
+    ref_to_timetime_ms = now_ms;
+
+    char text[MAVLINK_MSG_STATUSTEXT_FIELD_TEXT_LEN+1];
+    va_list arg_list;
+    va_start(arg_list, fmt);
+    hal.util->vsnprintf(text, sizeof(text), fmt, arg_list);
+    va_end(arg_list);
+    gcs().send_statustext(severity, (1<<chan), text);
 }
 
 void GCS_MAVLINK::handle_radio_status(const mavlink_message_t &msg, bool log_radio)
@@ -1140,10 +1160,12 @@ bool GCS_MAVLINK::set_ap_message_interval(enum ap_message id, uint16_t interval_
     }
 
     // send messages out at most 80% of main loop rate
+#if 0
     if (interval_ms != 0 &&
         interval_ms*800 < AP::scheduler().get_loop_period_us()) {
         interval_ms = AP::scheduler().get_loop_period_us()/800.0f;
     }
+#endif
 
     // check if it's a specially-handled message:
     const int8_t deferred_offset = get_deferred_message_index(id);
@@ -1740,7 +1762,7 @@ void GCS_MAVLINK::send_sensor_offsets()
                                     mag_offsets.z,
                                     compass.get_declination(),
                                     barometer.get_pressure(),
-                                    barometer.get_temperature()*100,
+                                    ins.get_temperature(0)*100,
                                     gyro_offsets.x,
                                     gyro_offsets.y,
                                     gyro_offsets.z,
@@ -2340,6 +2362,7 @@ MAV_RESULT GCS_MAVLINK::set_message_interval(uint32_t msg_id, int32_t interval_u
         interval_ms = interval_us / 1000;
     }
     if (set_mavlink_message_id_interval(msg_id, interval_ms)) {
+        set_message_interval_has_been_received = true;
         return MAV_RESULT_ACCEPTED;
     }
 
@@ -2592,10 +2615,12 @@ MAV_RESULT GCS_MAVLINK::handle_preflight_reboot(const mavlink_command_long_t &pa
         }
     }
 
+#if APM_BUILD_TYPE(APM_BUILD_ArduPlane) || APM_BUILD_TYPE(APM_BUILD_ArduCopter)
     if (hal.util->get_soft_armed()) {
         // refuse reboot when armed
         return MAV_RESULT_FAILED;
     }
+#endif
 
     if (!(is_equal(packet.param1, 1.0f) || is_equal(packet.param1, 3.0f))) {
         // param1 must be 1 or 3 - 1 being reboot, 3 being reboot-to-bootloader
@@ -3025,7 +3050,7 @@ void GCS_MAVLINK::handle_rc_channels_override(const mavlink_message_t &msg)
     for (uint8_t i=0; i<ARRAY_SIZE(override_data); i++) {
         // Per MAVLink spec a value of UINT16_MAX means to ignore this field.
         if (override_data[i] != UINT16_MAX) {
-            RC_Channels::set_override(i, override_data[i], tnow);
+            RC_Channels::set_override(i, override_data[i], MAVLINK_MSG_ID_RC_CHANNELS_OVERRIDE, tnow);
         }
     }
 }
@@ -3679,6 +3704,40 @@ MAV_RESULT GCS_MAVLINK::handle_command_do_set_home(const mavlink_command_long_t 
     return MAV_RESULT_ACCEPTED;
 }
 
+MAV_RESULT GCS_MAVLINK::handle_engine_control(const mavlink_command_long_t &packet)
+{
+    AP_ICEngine *ice = AP::ice();
+    if (ice == nullptr) {
+        return MAV_RESULT_UNSUPPORTED;
+    }
+
+    if (ice->engine_control(packet.param1, packet.param2, packet.param3, packet.param4)) {
+        return MAV_RESULT_ACCEPTED;
+    }
+    return MAV_RESULT_FAILED;
+}
+
+MAV_RESULT GCS_MAVLINK::handle_ice(const mavlink_command_long_t &packet)
+{
+    AP_ICEngine *ice = AP::ice();
+    if (ice == nullptr) {
+        return MAV_RESULT_UNSUPPORTED;
+    }
+
+    if (ice->handle_message(packet)) {
+        return MAV_RESULT_ACCEPTED;
+    }
+    return MAV_RESULT_FAILED;
+}
+
+MAV_RESULT GCS_MAVLINK::handle_user_message(const mavlink_command_long_t &packet)
+{
+    AP_UserCustom *userCustom = AP::usercustom();
+    if (userCustom == nullptr) {
+        return MAV_RESULT_UNSUPPORTED;
+    }
+    return userCustom->handle_user_message(packet);
+}
 
 MAV_RESULT GCS_MAVLINK::handle_command_long_packet(const mavlink_command_long_t &packet)
 {
@@ -3796,6 +3855,35 @@ MAV_RESULT GCS_MAVLINK::handle_command_long_packet(const mavlink_command_long_t 
 
     case MAV_CMD_REQUEST_MESSAGE:
         result = handle_command_request_message(packet);
+        break;
+
+    case MAV_CMD_WAYPOINT_USER_1:
+    case MAV_CMD_WAYPOINT_USER_2:
+    case MAV_CMD_WAYPOINT_USER_3:
+    case MAV_CMD_WAYPOINT_USER_4:
+    case MAV_CMD_WAYPOINT_USER_5:
+    case MAV_CMD_SPATIAL_USER_1:
+    case MAV_CMD_SPATIAL_USER_2:
+    case MAV_CMD_SPATIAL_USER_3:
+    case MAV_CMD_SPATIAL_USER_4:
+    case MAV_CMD_SPATIAL_USER_5:
+    case MAV_CMD_USER_1:
+    case MAV_CMD_USER_2:
+    case MAV_CMD_USER_3:
+    case MAV_CMD_USER_4:
+    case MAV_CMD_USER_5:
+        result = handle_user_message(packet);
+        break;
+
+    case MAV_CMD_ICE_TRANSMISSION_STATE:
+    case MAV_CMD_ICE_SET_TRANSMISSION_STATE:
+    case MAV_CMD_ICE_FUEL_LEVEL:
+    case MAV_CMD_ICE_COOLANT_TEMP:
+        result = handle_ice(packet);
+        break;
+
+    case MAV_CMD_DO_ENGINE_CONTROL:
+        result = handle_engine_control(packet);
         break;
 
     case MAV_CMD_DO_SET_SERVO:
@@ -4905,16 +4993,19 @@ void GCS_MAVLINK::manual_override(RC_Channel *c, int16_t value_in, const uint16_
     if (c == nullptr) {
         return;
     }
-    int16_t override_value = 0;
-    if (value_in != INT16_MAX) {
-        const int16_t radio_min = c->get_radio_min();
-        const int16_t radio_max = c->get_radio_max();
-        if (reversed) {
-            value_in *= -1;
-        }
-        override_value = radio_min + (radio_max - radio_min) * (value_in + offset) / scaler;
+
+    if (value_in == INT16_MAX) {
+        return;
     }
-    c->set_override(override_value, tnow);
+
+    const int16_t radio_min = c->get_radio_min();
+    const int16_t radio_max = c->get_radio_max();
+    if (reversed) {
+        value_in *= -1;
+    }
+
+    const int16_t override_value = radio_min + (radio_max - radio_min) * (value_in + offset) / scaler;
+    c->set_override(override_value, MAVLINK_MSG_ID_MANUAL_CONTROL, tnow);
 }
 
 GCS &gcs()

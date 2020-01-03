@@ -26,23 +26,25 @@ void Sub::init_rc_in()
     channel_lateral->set_default_dead_zone(30);
 
 #if CONFIG_HAL_BOARD != HAL_BOARD_SITL
+    const uint16_t source = MAVLINK_MSG_ID_MANUAL_CONTROL;
+    const uint32_t tnow = AP_HAL::millis();
     // initialize rc input to 1500 on control channels (rather than 0)
     for (int i = 0; i < 6; i++) {
-        RC_Channels::set_override(i, 1500);
+        RC_Channels::set_override(i, source, 1500, tnow);
     }
 
-    RC_Channels::set_override(6, 1500); // camera pan channel
-    RC_Channels::set_override(7, 1500); // camera tilt channel
+    RC_Channels::set_override(6, source, 1500, tnow); // camera pan channel
+    RC_Channels::set_override(7, source, 1500, tnow); // camera tilt channel
 
     RC_Channel* chan = RC_Channels::rc_channel(8);
     uint16_t min = chan->get_radio_min();
-    RC_Channels::set_override(8, min); // lights 1 channel
+    RC_Channels::set_override(8, source, min, tnow); // lights 1 channel
 
     chan = RC_Channels::rc_channel(9);
     min = chan->get_radio_min();
-    RC_Channels::set_override(9, min); // lights 2 channel
+    RC_Channels::set_override(9, source, min, tnow); // lights 2 channel
 
-    RC_Channels::set_override(10, 1100); // video switch
+    RC_Channels::set_override(10, source, 1100, tnow); // video switch
 #endif
 }
 

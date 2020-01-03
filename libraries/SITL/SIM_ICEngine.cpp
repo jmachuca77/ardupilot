@@ -17,33 +17,59 @@
 */
 
 #include "SIM_ICEngine.h"
+#include <AP_ICEngine/AP_ICEngine.h>
+#include <SRV_Channel/SRV_Channel.h>
+#include <AP_Math/AP_Math.h>
 #include <stdio.h>
+#include <SITL/SITL.h>
 
 using namespace SITL;
+
+
+// table of user settable parameters
+const AP_Param::GroupInfo ICEngine::var_info[] = {
+
+    // SIM_ICE_   <--8 chars
+    // @Param: RPM_FAIL
+    // @DisplayName: Engine RPM failure
+    // @Description: Engine RPM failure. When 1 the RPM is zero.
+    // @Values: 0:Disabled,1:Enabled
+    // @User: Advanced
+    AP_GROUPINFO("RPM_FAIL", 2, ICEngine, rpm_fail, 0),
+
+    AP_GROUPEND
+};
 
 /*
   update engine state, returning power output from 0 to 1
  */
-float ICEngine::update(const struct sitl_input &input)
+void ICEngine::update(const struct sitl_input &input, float &throttle_demand)
 {
-    bool have_ignition = ignition_servo>=0;
-    bool have_choke = choke_servo>=0;
-    bool have_starter = starter_servo>=0;
-    float throttle_demand = (input.servos[throttle_servo]-1000) * 0.001f;
+    AP_ICEngine *ice = AP::ice();
+    const bool has_gears = (ice != nullptr) && ice->has_gears();
 
-    state.ignition = have_ignition?input.servos[ignition_servo]>1700:true;
-    state.choke = have_choke?input.servos[choke_servo]>1700:false;
-    state.starter = have_starter?input.servos[starter_servo]>1700:false;
+    // simulate engine RPM failure of 0rpm or a range of idle of 1000 and max of 7000
+    AP::sitl()->state.rpm[0] = (rpm_fail==0 ? 1000+(throttle_demand*6000) : 0);
 
-    uint64_t now = AP_HAL::micros64();
-    float dt = (now - last_update_us) * 1.0e-6f;
-    float max_change = slew_rate * 0.01f * dt;
-    
+    const bool have_starter = SRV_Channels::function_assigned(SRV_Channel::k_starter);
+
     if (!have_starter) {
         // always on
         last_output = throttle_demand;
-        return last_output;
+        return;
     }
+
+    const bool have_ignition = SRV_Channels::function_assigned(SRV_Channel::k_ignition);
+    const bool have_choke = SRV_Channels::function_assigned(SRV_Channel::k_choke);
+
+    uint16_t pwmValue;
+    state.ignition = (have_ignition && SRV_Channels::get_output_pwm(SRV_Channel::k_ignition, pwmValue)) ? pwmValue>1700:true;
+    state.choke = (have_choke && SRV_Channels::get_output_pwm(SRV_Channel::k_choke, pwmValue)) ? pwmValue>1700:false;
+    state.starter = (have_starter && SRV_Channels::get_output_pwm(SRV_Channel::k_starter, pwmValue)) ? pwmValue>1700:false;
+
+    const uint64_t now = AP_HAL::micros64();
+    const float dt = (now - last_update_us) * 1.0e-6f;
+    const float max_change = slew_rate * 0.01f * dt;
 
     if (state.value != last_state.value) {
         printf("choke:%u starter:%u ignition:%u\n",
@@ -59,7 +85,9 @@ float ICEngine::update(const struct sitl_input &input)
         }
         // give 10% when on starter alone without ignition
         last_update_us = now;
-        throttle_demand = 0.1;
+        if (!has_gears) {
+            throttle_demand = 0.1;
+        }
         goto output;
     }
     if (have_choke && state.choke && now - start_time_us > 1000*1000UL) {
@@ -92,7 +120,12 @@ float ICEngine::update(const struct sitl_input &input)
     }
 
 output:
-    if (start_time_us != 0 && throttle_demand < 0.01) {
+    if (has_gears) {
+        if (ice->gear_is_park() || ice->gear_is_neutral()) {
+            throttle_demand = 0;
+        }
+
+    } else if (start_time_us != 0 && throttle_demand < 0.01) {
         // even idling it gives some thrust
         throttle_demand = 0.01;
     }
@@ -100,18 +133,18 @@ output:
     last_output = constrain_float(throttle_demand, last_output-max_change, last_output+max_change);
     last_output = constrain_float(last_output, 0, 1);
     
-    last_update_us = now;
-    last_state = state;
-    return last_output;
+    goto done;
 
 engine_off:
     if (start_time_us != 0) {
         printf("Engine stopped\n");
     }
-    last_update_us = AP_HAL::micros64();
     start_time_us = 0;
     last_output = 0;
+
+done:
+    last_update_us = now;
     last_state = state;
-    start_time_us = 0;
-    return 0;
+    throttle_demand = last_output;
+    return;
 }

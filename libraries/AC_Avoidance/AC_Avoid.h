@@ -40,6 +40,9 @@ public:
     // return true if any avoidance feature is enabled
     bool enabled() const { return _enabled != AC_AVOID_DISABLED; }
 
+    // return true is a specific, single or combination, of features are enabled
+    bool feature_is_enabled(uint8_t feature_mask) const { return enabled() && (_enabled & feature_mask) != 0; }
+
     /*
      * Adjusts the desired velocity so that the vehicle can stop
      * before the fence/object.
@@ -86,6 +89,9 @@ public:
 
     // return true if limiting is active
     bool limits_active() const {return (AP_HAL::millis() - _last_limit_time) < AC_AVOID_ACTIVE_LIMIT_TIMEOUT_MS;};
+    // return true if the Avoid library is actively slowing or stopping the vehicle
+    bool get_is_slowing_vehicle() { return (slowing_vehicle_ms > 0) && (AP_HAL::millis() - slowing_vehicle_ms < 500); }
+    bool get_is_stopping_vehicle() { return (stopping_vehicle_ms > 0) && (AP_HAL::millis() - stopping_vehicle_ms < 500); }
 
     static const struct AP_Param::GroupInfo var_info[];
 
@@ -154,6 +160,13 @@ private:
 
     bool _proximity_enabled = true; // true if proximity sensor based avoidance is enabled (used to allow pilot to enable/disable)
     uint32_t _last_limit_time;      // the last time a limit was active
+
+    uint32_t notify_gcs_ms;
+    uint32_t slowing_vehicle_ms;
+    uint32_t stopping_vehicle_ms;
+
+    void set_is_stopping_vehicle(uint32_t timestamp_ms) { stopping_vehicle_ms = timestamp_ms; set_is_slowing_vehicle(timestamp_ms); }
+    void set_is_slowing_vehicle(uint32_t timestamp_ms) { slowing_vehicle_ms = timestamp_ms; }
 
     static AC_Avoid *_singleton;
 };

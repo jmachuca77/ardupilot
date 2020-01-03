@@ -37,6 +37,8 @@
 
 #include "AP_Gripper/AP_Gripper.h"
 
+#define AP_SERVORELAY_EVENTS_INHIBIT_RELAY_WITH_ASSIGNED_SERVO_FUNCTION
+
 const AP_HAL::HAL& hal = AP_HAL::get_HAL();
 
 #define SCHED_TASK(func, _interval_ticks, _max_time_micros) SCHED_TASK_CLASS(Rover, &rover, func, _interval_ticks, _max_time_micros)
@@ -56,7 +58,7 @@ const AP_Scheduler::Task Rover::scheduler_tasks[] = {
     SCHED_TASK(update_GPS,             50,    300),
     SCHED_TASK_CLASS(AP_Baro,             &rover.barometer,        update,         10,  200),
     SCHED_TASK_CLASS(AP_Beacon,           &rover.g2.beacon,        update,         50,  200),
-    SCHED_TASK_CLASS(AP_Proximity,        &rover.g2.proximity,     update,         50,  200),
+    SCHED_TASK(proximity_update,       50,    200),
     SCHED_TASK_CLASS(AP_WindVane,         &rover.g2.windvane,      update,         20,  100),
     SCHED_TASK_CLASS(AC_Fence,            &rover.g2.fence,         update,         10,  100),
     SCHED_TASK(update_wheel_encoder,   50,    200),
@@ -70,6 +72,7 @@ const AP_Scheduler::Task Rover::scheduler_tasks[] = {
     SCHED_TASK_CLASS(RC_Channels,         (RC_Channels*)&rover.g2.rc_channels, read_aux_all,           10,    200),
     SCHED_TASK_CLASS(AP_BattMonitor,      &rover.battery,          read,           10,  300),
     SCHED_TASK_CLASS(AP_ServoRelayEvents, &rover.ServoRelayEvents, update_events,  50,  200),
+    SCHED_TASK_CLASS(AP_UserCustom,       &rover.g2.userCustom,    update,         50,  200),
 #if GRIPPER_ENABLED == ENABLED
     SCHED_TASK_CLASS(AP_Gripper,          &rover.g2.gripper,      update,         10,   75),
 #endif
@@ -90,6 +93,7 @@ const AP_Scheduler::Task Rover::scheduler_tasks[] = {
     SCHED_TASK_CLASS(AC_Sprayer,          &rover.g2.sprayer,           update,      3,  90),
 #endif
     SCHED_TASK_CLASS(Compass,          &rover.compass,              cal_update, 50, 200),
+    SCHED_TASK_CLASS(AP_ICEngine,         &rover.g2.ice_control,   update,         10,  100),
     SCHED_TASK(compass_save,           0.1,   200),
     SCHED_TASK(accel_cal_update,       10,    200),
 #if LOGGING_ENABLED == ENABLED
@@ -178,6 +182,31 @@ void Rover::stats_update(void)
 }
 #endif
 
+void Rover::proximity_update(void)
+{
+    g2.proximity.update();
+
+    if (g2.proximity.get_type(0) != AP_Proximity::Type::None &&
+        g2.proximity.get_status() != AP_Proximity::Status::Good &&
+        control_mode->is_autopilot_mode())
+    {
+        gcs().send_text(MAV_SEVERITY_INFO, "Proximity Sensor Failure, switching to HOLD");
+        rover.set_mode(rover.mode_hold, ModeReason::PROXIMITY_FAILSAFE);
+    }
+}
+/*
+  setup is called when the sketch starts
+ */
+void Rover::setup()
+{
+    // load the default values of variables listed in var_info[]
+    AP_Param::setup_sketch_defaults();
+
+    init_ardupilot();
+
+    // initialise the main loop scheduler
+    scheduler.init(&scheduler_tasks[0], ARRAY_SIZE(scheduler_tasks), MASK_LOG_PM);
+}
 
 // update AHRS system
 void Rover::ahrs_update()
@@ -313,6 +342,19 @@ void Rover::one_second_loop(void)
 
     // send latest param values to wp_nav
     g2.wp_nav.set_turn_params(g.turn_max_g, g2.turn_radius, g2.motors.have_skid_steering());
+
+#ifdef AP_SERVORELAY_EVENTS_INHIBIT_RELAY_WITH_ASSIGNED_SERVO_FUNCTION
+    for (uint8_t servo_ch=9; servo_ch<=14; servo_ch++) {
+        SRV_Channel *c = SRV_Channels::srv_channel(servo_ch);
+        const SRV_Channel::Aux_servo_function_t function = c->get_function();
+        const uint8_t relay_num = 15 - servo_ch;
+        if (function != SRV_Channel::k_none && relay.enabled(relay_num)) {
+            gcs().send_text(MAV_SEVERITY_INFO, "Disabling Relay pin %d, Servo %d Function is %d", relay_num, servo_ch, function);
+            relay.set(relay_num, false);
+        }
+    }
+#endif
+
 }
 
 void Rover::update_GPS(void)

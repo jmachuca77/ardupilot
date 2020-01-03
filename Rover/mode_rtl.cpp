@@ -5,17 +5,20 @@ bool ModeRTL::_enter()
 {
     // refuse RTL if home has not been set
     if (!AP::ahrs().home_is_set()) {
+        gcs().send_text(MAV_SEVERITY_NOTICE, "Mode Change Fail: Home is not set");
         return false;
     }
 
     // set target to the closest rally point or home
 #if AP_RALLY == ENABLED
     if (!g2.wp_nav.set_desired_location(g2.rally.calc_best_rally_or_home_location(rover.current_loc, ahrs.get_home().alt))) {
+        gcs().send_text(MAV_SEVERITY_NOTICE, "Mode Change Fail: No Position");
         return false;
     }
 #else
     // set destination
     if (!g2.wp_nav.set_desired_location(ahrs.get_home())) {
+        gcs().send_text(MAV_SEVERITY_NOTICE, "Mode Change Fail: No Position");
         return false;
     }
 #endif
@@ -65,6 +68,8 @@ void ModeRTL::update()
         // update distance to destination
         _distance_to_destination = rover.current_loc.get_distance(g2.wp_nav.get_destination());
     }
+
+    Mode::apply_stick_mixing_override();
 }
 
 // get desired location

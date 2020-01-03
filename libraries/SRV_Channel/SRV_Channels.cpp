@@ -154,6 +154,15 @@ const AP_Param::GroupInfo SRV_Channels::var_info[] = {
     // @Path: ../AP_RobotisServo/AP_RobotisServo.cpp
     AP_SUBGROUPINFO(robotis, "_ROB_",  22, SRV_Channels, AP_RobotisServo),
     
+    // @Param: _OPTIONS
+    // @DisplayName: Servo options bitbask
+    // @Description: Bitmask of options to use with Servo outputs
+    // @Bitmask: 0:RCin passthrough data defaults to trim until overrwritten by Rc input
+    // @RebootRequired: True
+    AP_GROUPINFO("_OPTIONS",  23, SRV_Channels, _options, 1),
+
+
+
     AP_GROUPEND
 };
 
@@ -171,6 +180,11 @@ SRV_Channels::SRV_Channels(void)
     // setup ch_num on channels
     for (uint8_t i=0; i<NUM_SERVO_CHANNELS; i++) {
         channels[i].ch_num = i;
+
+        if (_options & SRV_Channel::OptionsMask::RCIN_PASSTHROUGH_DEFAULT_IS_TRIM) {
+            if (SRV_Channel::is_rcin_passthrough(channels[i].get_function()))
+            channels[i].set_output_pwm(channels[i].get_trim());
+        }
     }
 
     volz_ptr = &volz;

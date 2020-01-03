@@ -285,6 +285,9 @@ public:
     // whether to enforce acceptance of packets only from sysid_my_gcs
     AP_Int8 sysid_enforce;
 
+    // internal combustion engine control
+    AP_ICEngine ice_control;
+
     // RC input channels
     RC_Channels_Rover rc_channels;
 
@@ -336,7 +339,12 @@ public:
     AP_Float bal_pitch_max;
 
     // pitch/roll angle for crash check
-    AP_Int8 crash_angle;
+    AP_Int8 crash_angle_pitch;
+    AP_Int8 crash_angle_roll;
+
+    // failsafe to check integrator wind-up
+    AP_Float fs_pid_i_steering;
+    AP_Float fs_pid_i_throttle;
 
     // follow mode library
     AP_Follow follow;
@@ -399,6 +407,13 @@ public:
 
     // FS options
     AP_Int32 fs_options;
+
+    AP_Float    fs_throttle_timeout;
+
+    // mechanical emergency brake channel number
+    AP_Int8 ebrake_rc_channel;
+
+    AP_UserCustom userCustom;
 };
 
 extern const AP_Param::Info var_info[];

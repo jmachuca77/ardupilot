@@ -169,6 +169,22 @@ const AP_Param::GroupInfo AP_BattMonitor_Params::var_info[] = {
     // @User: Standard
     AP_GROUPINFO("BUS", 20, AP_BattMonitor_Params, _i2c_bus, 0),
 
+    // @Param: VOLT_FULL
+    // @DisplayName: Full battery voltage
+    // @Description: Battery voltage that is considered fully charged. Used to compute a percent if no current sensor is available. Accuracy is better with current sensor.
+    // @Units: V
+    // @Increment: 0.1
+    // @User: Advanced
+    AP_GROUPINFO("VOLT_FULL", 30, AP_BattMonitor_Params, _voltage_full, 0),
+
+    // @Param: VOLT_EMPTY
+    // @DisplayName: Empty battery voltage
+    // @Description: Battery voltage that is considered completely empty with 0% remaining. Used to compute a percent if no current sensor is available. Accuracy is better with current sensor.
+    // @Units: V
+    // @Increment: 0.1
+    // @User: Advanced
+    AP_GROUPINFO("VOLT_EMPTY", 31, AP_BattMonitor_Params, _voltage_empty, 0),
+
     AP_GROUPEND
 
 };

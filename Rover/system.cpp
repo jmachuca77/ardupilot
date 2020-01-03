@@ -24,6 +24,8 @@ void Rover::init_ardupilot()
     BoardConfig_CAN.init();
 #endif
 
+    g2.ice_control.init(true);  // init ICE and set outputs
+
     // init gripper
 #if GRIPPER_ENABLED == ENABLED
     g2.gripper.init();
@@ -199,6 +201,70 @@ void Rover::update_ahrs_flyforward()
     ahrs.set_fly_forward(flyforward);
 }
 
+void Rover::set_throttle(float throttle)
+{
+    if (g2.avoid.get_is_stopping_vehicle()) { // Avoid library wants the vehicle stopped
+        throttle = MIN(throttle, 0);
+    }
+
+    if (rover.g2.ice_control.throttle_override(throttle)) {
+        // the ICE controller wants to override the throttle for starting
+        g2.attitude_control.get_throttle_speed_pid().freeze_integrator(1000);
+    }
+
+    // master overrider. If we're ever applying brakes we must always turn off the throttle
+    if (get_emergency_brake() > 0) {
+        throttle = 0;
+    }
+    rover.g2.ice_control.set_current_throttle(throttle);
+    const bool is_mode_manual = (rover.control_mode == &rover.mode_manual);
+    g2.motors.set_throttle(throttle, is_mode_manual);
+}
+
+void Rover::set_brake(float brake_percent)
+{
+    float speed = 0;
+    const bool speed_is_valid = g2.attitude_control.get_forward_speed(speed);
+
+    if (rover.g2.ice_control.brake_override(brake_percent, g2.attitude_control.get_desired_speed(), speed_is_valid, speed)) {
+        // the ICE controller wants to override the brake, usually for starting or gear changes
+    }
+
+    if (is_zero(g2.motors.get_throttle()) &&        // throttle == 0
+        speed_is_valid && fabs(speed) < 0.1f &&     // speed == 0
+        g2.avoid.get_is_stopping_vehicle() &&       // Avoiding wants the vehicle stopped
+        control_mode->is_autopilot_mode() &&        // in AUTO/GUIDED-ish mode
+        !rover.g2.ice_control.gear_is_park() &&     // Gear is not park
+        !rover.g2.ice_control.gear_is_neutral())
+    {
+        brake_percent = 100;
+    }
+
+    // master overrider. If we're ever giving throttle we must always turn off the brake
+    if (g2.motors.get_throttle() > 0) {
+        brake_percent = 0;
+    }
+
+    brake_percent = MAX(brake_percent, get_emergency_brake());
+
+    g2.motors.set_brake(brake_percent);
+}
+
+float Rover::get_emergency_brake()
+{
+    if (g2.ebrake_rc_channel <= 0) {
+        return 0;
+    }
+    RC_Channel *c = rc().channel(g2.ebrake_rc_channel-1);
+    if (c == nullptr) {
+        return 0;
+    }
+
+    c->set_range(100);
+    return c->get_control_in();
+}
+
+
 bool Rover::set_mode(Mode &new_mode, ModeReason reason)
 {
     if (control_mode == &new_mode) {
@@ -212,6 +278,11 @@ bool Rover::set_mode(Mode &new_mode, ModeReason reason)
         AP::logger().Write_Error(LogErrorSubsystem::FLIGHT_MODE,
                                  LogErrorCode(new_mode.mode_number()));
         gcs().send_text(MAV_SEVERITY_WARNING, "Flight mode change failed");
+
+        // ensure ICE knows the mode was unsuccessful but we still allowed a start-up to be kicked off if configured to do so
+        // This allows us to start the engine on an autoNav mode change but even on a set_mode failure it will at least start the engine still
+        // This allows the engine to warm-up or systems that depend on vehicle battery power to boot-up while the user re-attempts the mode change
+        g2.ice_control.mode_change_or_new_autoNav_point_event(control_mode->is_autopilot_mode());
         return false;
     }
 

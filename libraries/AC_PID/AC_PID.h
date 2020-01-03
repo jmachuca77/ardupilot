@@ -102,6 +102,7 @@ public:
     void set_integrator(float target, float measurement, float i);
     void set_integrator(float error, float i);
     void set_integrator(float i);
+    void freeze_integrator(uint32_t duration_ms) { _integrator_freeze_duration_ms = duration_ms; _integrator_freeze_start_ms = AP_HAL::millis(); }
 
     const AP_Logger::PID_Info& get_pid_info(void) const { return _pid_info; }
 
@@ -128,6 +129,8 @@ protected:
     // internal variables
     float _dt;                // timestep in seconds
     float _integrator;        // integrator value
+    uint32_t _integrator_freeze_start_ms;   // timestamp of start of integrator freeze.
+    uint32_t _integrator_freeze_duration_ms;// duration of how long we will freeze integrator re-calculations. Zero means disabled, normal operation
     float _target;            // target value to enable filtering
     float _error;             // error value to enable filtering
     float _derivative;        // derivative value to enable filtering

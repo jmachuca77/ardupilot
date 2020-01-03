@@ -124,7 +124,7 @@ bool AP_Compass_RM3100::init()
         return false;
     }
 
-    dev->setup_checked_registers(8);
+    dev->setup_checked_registers(7);
 
     dev->write_register(RM3100_TMRC_REG, TMRC, true); // CMM data rate
     dev->write_register(RM3100_CMM_REG, CMM, true); // CMM configuration

@@ -140,7 +140,8 @@ void Sailboat::init()
 {
     // sailboat defaults
     if (sail_enabled()) {
-        rover.g2.crash_angle.set_default(0);
+        rover.g2.crash_angle_pitch.set_default(0);
+        rover.g2.crash_angle_roll.set_default(0);
     }
 
     if (tack_enabled()) {
@@ -198,12 +199,17 @@ void Sailboat::get_throttle_and_mainsail_out(float desired_speed, float &throttl
          motor_assist_tack() ||
          motor_assist_low_wind()) {
         // run speed controller - duplicate of calls found in mode::calc_throttle();
-        throttle_out = 100.0f * rover.g2.attitude_control.get_throttle_out_speed(desired_speed,
-                                                                        rover.g2.motors.limit.throttle_lower,
-                                                                        rover.g2.motors.limit.throttle_upper,
-                                                                        rover.g.speed_cruise,
-                                                                        rover.g.throttle_cruise * 0.01f,
-                                                                        rover.G_Dt);
+        float throttle = 0.0f;
+        float unused;
+        rover.g2.attitude_control.get_throttle_and_brake_out_speed(desired_speed,
+                                                                rover.g2.motors.limit.throttle_lower,
+                                                                rover.g2.motors.limit.throttle_upper,
+                                                                rover.g.speed_cruise,
+                                                                rover.g.throttle_cruise * 0.01f,
+                                                                rover.G_Dt,
+                                                                throttle,
+                                                                unused);
+        throttle_out = throttle * 100.0f;
     } else {
         throttle_out = 0.0f;
     }

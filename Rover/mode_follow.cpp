@@ -5,6 +5,7 @@
 bool ModeFollow::_enter()
 {
     if (!g2.follow.enabled()) {
+        gcs().send_text(MAV_SEVERITY_NOTICE, "Mode Change Fail: Follow not Enabled");
         return false;
     }
 
@@ -26,8 +27,9 @@ void ModeFollow::update()
     float speed;
     if (!attitude_control.get_forward_speed(speed)) {
         // no valid speed so stop
-        g2.motors.set_throttle(0.0f);
-        g2.motors.set_steering(0.0f);
+        rover.set_throttle(0.0f);
+        rover.set_brake(0.0f);
+        set_steering(0.0f);
         return;
     }
 
@@ -70,7 +72,9 @@ void ModeFollow::update()
     const float desired_yaw_cd = wrap_180_cd(atan2f(desired_velocity_ne.y, desired_velocity_ne.x) * DEGX100);
 
     // run steering and throttle controllers
+    Mode::apply_stick_mixing_override();
     calc_steering_to_heading(desired_yaw_cd);
+
     calc_throttle(desired_speed, true);
 }
 

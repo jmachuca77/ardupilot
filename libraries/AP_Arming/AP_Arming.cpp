@@ -26,6 +26,7 @@
 #include <SRV_Channel/SRV_Channel.h>
 #include <AC_Fence/AC_Fence.h>
 #include <AP_InternalError/AP_InternalError.h>
+#include "AP_UserCustom/AP_UserCustom.h"
 #include <AP_GPS/AP_GPS.h>
 #include <AP_Airspeed/AP_Airspeed.h>
 #include <AP_AHRS/AP_AHRS.h>
@@ -870,6 +871,15 @@ bool AP_Arming::can_checks(bool report)
     return true;
 }
 
+bool AP_Arming::user_custom_checks(bool report)
+{
+    AP_UserCustom *userCustom = AP::usercustom();
+    if (userCustom == nullptr) {
+        return true;
+    }
+    return userCustom->arming_check(report);
+}
+
 
 bool AP_Arming::fence_checks(bool display_failure)
 {
@@ -1047,6 +1057,7 @@ bool AP_Arming::pre_arm_checks(bool report)
         &  logging_checks(report)
         &  manual_transmitter_checks(report)
         &  mission_checks(report)
+        &  user_custom_checks(report)
         &  rangefinder_checks(report)
         &  servo_checks(report)
         &  board_voltage_checks(report)
@@ -1107,6 +1118,9 @@ bool AP_Arming::arm(AP_Arming::Method method, const bool do_arming_checks)
         armed = true;
 
         Log_Write_Arm(!do_arming_checks, method); // note Log_Write_Armed takes forced not do_arming_checks
+        armed_method = method;
+        //TODO: Log motor arming
+        //Can't do this from this class until there is a unified logging library
 
     } else {
         AP::logger().arming_failure();

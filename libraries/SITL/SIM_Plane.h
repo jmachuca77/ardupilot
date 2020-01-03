@@ -97,25 +97,11 @@ protected:
     bool vtail;
     bool dspoilers;
     bool reverse_elevator_rudder;
-    bool ice_engine;
     bool tailsitter;
     bool have_launcher;
     float launch_accel;
     float launch_time;
     uint64_t launch_start_ms;
-
-    const uint8_t throttle_servo = 2;
-    const int8_t choke_servo = 14;
-    const int8_t ignition_servo = 12;
-    const int8_t starter_servo = 13;
-    const float slewrate = 100;
-    ICEngine icengine{
-        throttle_servo,
-        choke_servo,
-        ignition_servo,
-        starter_servo,
-        slewrate
-    };
 
     float liftCoeff(float alpha) const;
     float dragCoeff(float alpha) const;

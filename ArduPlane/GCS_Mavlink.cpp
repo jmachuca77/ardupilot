@@ -661,6 +661,8 @@ bool GCS_MAVLINK_Plane::handle_guided_request(AP_Mission::Mission_Command &cmd)
         plane.guided_WP_loc.relative_alt = 0;
     }
 
+    plane.g2.ice_control.mode_change_or_new_autoNav_point_event(plane.auto_navigation_mode);
+
     plane.set_guided_WP();
     return true;
 }
@@ -1000,12 +1002,6 @@ MAV_RESULT GCS_MAVLINK_Plane::handle_command_long_packet(const mavlink_command_l
 
     case MAV_CMD_DO_VTOL_TRANSITION:
         if (!plane.quadplane.handle_do_vtol_transition((enum MAV_VTOL_STATE)packet.param1)) {
-            return MAV_RESULT_FAILED;
-        }
-        return MAV_RESULT_ACCEPTED;
-
-    case MAV_CMD_DO_ENGINE_CONTROL:
-        if (!plane.g2.ice_control.engine_control(packet.param1, packet.param2, packet.param3)) {
             return MAV_RESULT_FAILED;
         }
         return MAV_RESULT_ACCEPTED;

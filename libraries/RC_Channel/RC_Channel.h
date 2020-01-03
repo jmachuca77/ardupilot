@@ -68,7 +68,7 @@ public:
     void       set_control_in(int16_t val) { control_in = val;}
 
     void       clear_override();
-    void       set_override(const uint16_t v, const uint32_t timestamp_ms);
+    void       set_override(const uint16_t v, const uint32_t source, const uint32_t timestamp_us);
     bool       has_override() const;
 
     int16_t    stick_mixing(const int16_t servo_in);
@@ -250,7 +250,8 @@ private:
 
     // overrides
     uint16_t override_value;
-    uint32_t last_override_time;
+    uint32_t last_override_time1;
+    uint32_t last_override_time2;
 
     int16_t pwm_to_angle() const;
     int16_t pwm_to_angle_dz(uint16_t dead_zone) const;
@@ -317,7 +318,7 @@ public:
     bool read_input(void);                                             // returns true if new input has been read in
     static void clear_overrides(void);                                 // clears any active overrides
     static bool receiver_bind(const int dsmMode);                      // puts the receiver in bind mode if present, returns true if success
-    static void set_override(const uint8_t chan, const int16_t value, const uint32_t timestamp_ms = 0); // set a channels override value
+    static void set_override(const uint8_t chan, const int16_t value, const uint32_t source, const uint32_t timestamp_ms); // set a channels override value
     static bool has_active_overrides(void);                            // returns true if there are overrides applied that are valid
 
     class RC_Channel *find_channel_for_option(const RC_Channel::aux_func_t option);
@@ -373,8 +374,17 @@ public:
         return _options & uint32_t(Option::ARMING_SKIP_CHECK_RPY);
     }
 
+    //  Might need to remove CHECK
     float override_timeout_ms() const {
         return _override_timeout.get() * 1e3f;
+    }
+
+    float override_timeout1_ms() const {
+        return _override_timeout1.get() * 1e3f;
+    }
+    
+    float override_timeout2_ms() const {
+        return _override_timeout2.get() * 1e3f;
     }
 
     /*
@@ -410,7 +420,8 @@ private:
     uint32_t last_update_ms;
     bool has_new_overrides;
 
-    AP_Float _override_timeout;
+    AP_Float _override_timeout1;
+    AP_Float _override_timeout2;
     AP_Int32  _options;
 
     // flight_mode_channel_number must be overridden in vehicle specific code

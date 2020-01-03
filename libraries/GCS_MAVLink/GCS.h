@@ -103,6 +103,7 @@ public:
     bool        init(uint8_t instance);
     void        send_message(enum ap_message id);
     void        send_text(MAV_SEVERITY severity, const char *fmt, ...) const FMT_PRINTF(3, 4);
+    void        send_text_rate_limited(MAV_SEVERITY severity, const uint32_t interval_ms, uint32_t &ref_to_timetime_ms, const char *fmt, ...) const;
     void        queued_param_send();
     void        queued_mission_request_send();
 
@@ -410,11 +411,16 @@ protected:
     virtual bool should_zero_rc_outputs_on_reboot() const { return false; }
     virtual MAV_RESULT handle_preflight_reboot(const mavlink_command_long_t &packet);
 
+    MAV_RESULT handle_engine_control(const mavlink_command_long_t &packet);
+    MAV_RESULT handle_ice(const mavlink_command_long_t &packet);
+    MAV_RESULT handle_user_message(const mavlink_command_long_t &packet);
+
     // reset a message interval via mavlink:
     MAV_RESULT handle_command_set_message_interval(const mavlink_command_long_t &packet);
     MAV_RESULT handle_command_get_message_interval(const mavlink_command_long_t &packet);
     bool get_ap_message_interval(ap_message id, uint16_t &interval_ms) const;
     MAV_RESULT handle_command_request_message(const mavlink_command_long_t &packet);
+    bool set_message_interval_has_been_received;
 
     MAV_RESULT handle_rc_bind(const mavlink_command_long_t &packet);
     virtual MAV_RESULT handle_flight_termination(const mavlink_command_long_t &packet);
@@ -867,6 +873,9 @@ public:
     void send_textv(MAV_SEVERITY severity, const char *fmt, va_list arg_list);
     virtual void send_textv(MAV_SEVERITY severity, const char *fmt, va_list arg_list, uint8_t mask);
 
+    void send_text_rate_limited(MAV_SEVERITY severity, const uint32_t interval_ms, uint32_t &ref_to_timetime_ms, const char *fmt, ...);
+    virtual void send_statustext(MAV_SEVERITY severity, uint8_t dest_bitmask, const char *text);
+    void service_statustext(void);
     virtual GCS_MAVLINK *chan(const uint8_t ofs) = 0;
     virtual const GCS_MAVLINK *chan(const uint8_t ofs) const = 0;
     // return the number of valid GCS objects

@@ -59,7 +59,7 @@ public:
 
     // get or set throttle as a value from -100 to 100
     float get_throttle() const { return _throttle; }
-    void set_throttle(float throttle);
+    void set_throttle(float throttle, bool is_mode_manual);
 
     // set lateral input as a value from -100 to +100
     void set_lateral(float lateral);
@@ -71,12 +71,18 @@ public:
     // set or get wingsail input as a value from -100 to 100
     void set_wingsail(float wingsail);
     float get_wingsail() const { return _wingsail; }
+    // set brakes input as a value from 0 to 100
+    void set_brake(const float brake);
+    float get_brake() const { return _brake; }
 
     // get slew limited throttle
     // used by manual mode to avoid bad steering behaviour during transitions from forward to reverse
     // same as private slew_limit_throttle method (see below) but does not update throttle state
     float get_slew_limited_throttle(float throttle, float dt) const;
 
+    // true if the vehicle has brake
+    bool has_brake() const;
+	
     // true if vehicle is capable of skid steering
     bool have_skid_steering() const;
 
@@ -135,6 +141,9 @@ protected:
     // output to skid steering channels
     void output_skid_steering(bool armed, float steering, float throttle, float dt);
 
+    // output brakes in the range of 0 to 100
+    void output_brake();
+	
     // output for omni motors
     void output_omni(bool armed, float steering, float throttle, float lateral);
 
@@ -172,6 +181,7 @@ protected:
     AP_Int16 _slew_rate; // slew rate expressed as a percentage / second
     AP_Int8 _throttle_min; // throttle minimum percentage
     AP_Int8 _throttle_max; // throttle maximum percentage
+    AP_Int8 _throttle_max_manual_mode;  // throttle maximum percentage in MANUAL mode
     AP_Float _thrust_curve_expo; // thrust curve exponent from -1 to +1 with 0 being linear
     AP_Float _vector_throttle_base;  // throttle level above which steering is scaled down when using vector thrust.  zero to disable vectored thrust
     AP_Float _speed_scale_base;  // speed above which steering is scaled down when using regular steering/throttle vehicles.  zero to disable speed scaling
@@ -184,6 +194,7 @@ protected:
     float   _lateral;  // requested lateral input as a value from -100 to +100
     float   _mainsail;  // requested mainsail input as a value from 0 to 100
     float   _wingsail;  // requested wing sail input as a value in the range +- 100
+    float   _brake;    // requested brake input as a value from 0 to 100
 
     // omni variables
     float   _throttle_factor[AP_MOTORS_NUM_MOTORS_MAX];

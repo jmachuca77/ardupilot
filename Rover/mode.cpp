@@ -19,6 +19,8 @@ void Mode::exit()
 
 bool Mode::enter()
 {
+    g2.ice_control.mode_change_or_new_autoNav_point_event(is_autopilot_mode());
+
     const bool ignore_checks = !hal.util->get_soft_armed();   // allow switching to any mode if disarmed.  We rely on the arming check to perform
     if (!ignore_checks) {
 
@@ -29,13 +31,25 @@ bool Mode::enter()
         // check position estimate.  requires origin and at least one horizontal position flag to be true
         const bool position_ok = rover.ekf_position_ok() && !rover.failsafe.ekf;
         if (requires_position() && !position_ok) {
+            gcs().send_text(MAV_SEVERITY_NOTICE, "Mode Change Fail: No Position");
             return false;
         }
 
         // check velocity estimate (if we have position estimate, we must have velocity estimate)
         if (requires_velocity() && !position_ok && !filt_status.flags.horiz_vel) {
+            gcs().send_text(MAV_SEVERITY_NOTICE, "Mode Change Fail: No Velocity Estimate");
             return false;
         }
+    }
+
+
+    if (is_autopilot_mode() &&
+        g2.proximity.get_type(0) != AP_Proximity::Type::None &&
+        g2.proximity.get_status() != AP_Proximity::Status::Good)
+    {
+        // this means we're expecting data but don't have any. That's a failure mode where we inhibit any auto mode
+        gcs().send_text(MAV_SEVERITY_NOTICE, "Mode Change Fail: Proximity sensor - No data");
+        return false;
     }
 
     bool ret = _enter();
@@ -46,6 +60,10 @@ bool Mode::enter()
 
         // clear sailboat tacking flags
         rover.g2.sailboat.clear_tack();
+
+        if (is_autopilot_mode() && !is_positive(g2.wp_nav.get_default_speed())) {
+            gcs().send_text(MAV_SEVERITY_NOTICE, "Bad desired speed, check param WP_SPEED.");
+        }
     }
 
     return ret;
@@ -219,6 +237,29 @@ float Mode::get_speed_default(bool rtl) const
     return g2.wp_nav.get_default_speed();
 }
 
+// restore desired speed to default from parameter values (WP_SPEED)
+void Mode::set_desired_speed_to_default(bool rtl)
+{
+    _desired_speed = get_speed_default(rtl);
+    g2.wp_nav.set_desired_speed(_desired_speed);
+    gcs().send_text(MAV_SEVERITY_DEBUG, "set_desired_speed_to_default() %.1f m/s", _desired_speed);
+}
+
+// set desired speed in m/s
+bool Mode::set_desired_speed(float speed)
+{
+    if (is_equal(speed,-2.0f)) {
+        rover.control_mode->set_desired_speed_to_default(false);
+        return true;
+    } else if (!is_negative(speed)) {
+        _desired_speed = speed;
+        g2.wp_nav.set_desired_speed(_desired_speed);
+        gcs().send_text(MAV_SEVERITY_DEBUG, "set_desired_speed = %.1f m/s", speed);
+        return true;
+    }
+    return false;
+}
+
 // execute the mission in reverse (i.e. backing up)
 void Mode::set_reversed(bool value)
 {
@@ -252,6 +293,7 @@ void Mode::calc_throttle(float target_speed, bool avoidance_enabled)
 
     // call throttle controller and convert output to -100 to +100 range
     float throttle_out = 0.0f;
+    float brake_out = 0.0f;
 
     if (rover.g2.sailboat.sail_enabled()) {
         // sailboats use special throttle and mainsail controller
@@ -264,19 +306,25 @@ void Mode::calc_throttle(float target_speed, bool avoidance_enabled)
         // call speed or stop controller
         if (is_zero(target_speed) && !rover.is_balancebot()) {
             bool stopped;
-            throttle_out = 100.0f * attitude_control.get_throttle_out_stop(g2.motors.limit.throttle_lower, g2.motors.limit.throttle_upper, g.speed_cruise, g.throttle_cruise * 0.01f, rover.G_Dt, stopped);
+            attitude_control.get_throttle_and_brake_out_stop(g2.motors.limit.throttle_lower, g2.motors.limit.throttle_upper, g.speed_cruise, g.throttle_cruise * 0.01f, rover.G_Dt, stopped, throttle_out, brake_out);
         } else {
-            throttle_out = 100.0f * attitude_control.get_throttle_out_speed(target_speed, g2.motors.limit.throttle_lower, g2.motors.limit.throttle_upper, g.speed_cruise, g.throttle_cruise * 0.01f, rover.G_Dt);
+            attitude_control.get_throttle_and_brake_out_speed(target_speed, g2.motors.limit.throttle_lower, g2.motors.limit.throttle_upper, g.speed_cruise, g.throttle_cruise * 0.01f, rover.G_Dt, throttle_out, brake_out);
         }
+
+        // convert range (-1 +1) to a percent (-100 +100)
+        throttle_out *= 100.0f;
+        brake_out *= 100.0f;
 
         // if vehicle is balance bot, calculate actual throttle required for balancing
         if (rover.is_balancebot()) {
             rover.balancebot_pitch_control(throttle_out);
+            brake_out = 0;
         }
     }
 
     // send to motor
-    g2.motors.set_throttle(throttle_out);
+    rover.set_throttle(throttle_out);
+    rover.set_brake(brake_out);
 }
 
 // performs a controlled stop with steering centered
@@ -285,13 +333,22 @@ bool Mode::stop_vehicle()
     // call throttle controller and convert output to -100 to +100 range
     bool stopped = false;
     float throttle_out;
+    float brake_out;
 
     // if vehicle is balance bot, calculate throttle required for balancing
     if (rover.is_balancebot()) {
-        throttle_out = 100.0f * attitude_control.get_throttle_out_speed(0, g2.motors.limit.throttle_lower, g2.motors.limit.throttle_upper, g.speed_cruise, g.throttle_cruise * 0.01f, rover.G_Dt);
-        rover.balancebot_pitch_control(throttle_out);
+        attitude_control.get_throttle_and_brake_out_speed(0, g2.motors.limit.throttle_lower, g2.motors.limit.throttle_upper, g.speed_cruise, g.throttle_cruise * 0.01f, rover.G_Dt, throttle_out, brake_out);
     } else {
-        throttle_out = 100.0f * attitude_control.get_throttle_out_stop(g2.motors.limit.throttle_lower, g2.motors.limit.throttle_upper, g.speed_cruise, g.throttle_cruise * 0.01f, rover.G_Dt, stopped);
+        attitude_control.get_throttle_and_brake_out_stop(g2.motors.limit.throttle_lower, g2.motors.limit.throttle_upper, g.speed_cruise, g.throttle_cruise * 0.01f, rover.G_Dt, stopped, throttle_out, brake_out);
+    }
+
+    // convert range (-1 +1) to a percent (-100 +100)
+    throttle_out *= 100.0f;
+    brake_out *= 100.0f;
+
+    if (rover.is_balancebot()) {
+        rover.balancebot_pitch_control(throttle_out);
+        brake_out = 0;
     }
 
     // relax sails if present
@@ -299,10 +356,11 @@ bool Mode::stop_vehicle()
     g2.motors.set_wingsail(0.0f);
 
     // send to motor
-    g2.motors.set_throttle(throttle_out);
+    rover.set_throttle(throttle_out);
+    rover.set_brake(brake_out);
 
     // do not attempt to steer
-    g2.motors.set_steering(0.0f);
+    set_steering(0.0f);
 
     // return true once stopped
     return stopped;
@@ -378,7 +436,7 @@ void Mode::navigate_to_waypoint()
     _distance_to_destination = g2.wp_nav.get_distance_to_destination();
 
     // pass speed to throttle controller after applying nudge from pilot
-    float desired_speed = g2.wp_nav.get_speed();
+    float desired_speed = g2.wp_nav.get_speed(); // this is the accel limited desired speed
     desired_speed = calc_speed_nudge(desired_speed, g2.wp_nav.get_reversed());
     calc_throttle(desired_speed, true);
 
@@ -389,7 +447,8 @@ void Mode::navigate_to_waypoint()
         // use pivot turn rate for tacks
         const float turn_rate = g2.sailboat.tacking() ? g2.wp_nav.get_pivot_rate() : 0.0f;
         calc_steering_to_heading(desired_heading_cd, turn_rate);
-    } else {
+
+    } else if (!_stick_mixing.is_active()) { // if stick_mixing is active, then it's setting steering
         // call turn rate steering controller
         calc_steering_from_turn_rate(g2.wp_nav.get_turn_rate_rads(), desired_speed, g2.wp_nav.get_reversed());
     }
@@ -403,7 +462,7 @@ void Mode::calc_steering_from_turn_rate(float turn_rate, float speed, bool rever
                                                                       g2.motors.limit.steer_left,
                                                                       g2.motors.limit.steer_right,
                                                                       rover.G_Dt);
-    g2.motors.set_steering(steering_out * 4500.0f);
+    set_steering(steering_out * 4500.0f);
 }
 
 /*
@@ -411,6 +470,12 @@ void Mode::calc_steering_from_turn_rate(float turn_rate, float speed, bool rever
 */
 void Mode::calc_steering_from_lateral_acceleration(float lat_accel, bool reversed)
 {
+    if (_stick_mixing.is_active()) {
+        // stick mixing is currently setting the steering via
+        // calc_steering_from_turn_rate() so don't let anyone else set it
+        return;
+    }
+
     // constrain to max G force
     lat_accel = constrain_float(lat_accel, -g.turn_max_g * GRAVITY_MSS, g.turn_max_g * GRAVITY_MSS);
 
@@ -426,6 +491,12 @@ void Mode::calc_steering_from_lateral_acceleration(float lat_accel, bool reverse
 // rate_max is a maximum turn rate in deg/s.  set to zero to use default turn rate limits
 void Mode::calc_steering_to_heading(float desired_heading_cd, float rate_max_degs)
 {
+    if (_stick_mixing.is_active()) {
+        // stick mixing is currently setting the steering via
+        // calc_steering_from_turn_rate() so don't let anyone else set it
+        return;
+    }
+
     // call heading controller
     const float steering_out = attitude_control.get_steering_out_heading(radians(desired_heading_cd*0.01f),
                                                                          radians(rate_max_degs),
@@ -437,9 +508,6 @@ void Mode::calc_steering_to_heading(float desired_heading_cd, float rate_max_deg
 
 void Mode::set_steering(float steering_value)
 {
-    if (allows_stick_mixing() && g2.stick_mixing > 0) {
-        steering_value = channel_steer->stick_mixing((int16_t)steering_value);
-    }
     steering_value = constrain_float(steering_value, -4500.0f, 4500.0f);
     g2.motors.set_steering(steering_value);
 }
@@ -489,3 +557,56 @@ Mode *Rover::mode_from_mode_num(const enum Mode::Number num)
     }
     return ret;
 }
+
+bool Mode::apply_stick_mixing_override()
+{
+    if (g2.stick_mixing <= 0 || !allows_stick_mixing()) {
+        _stick_mixing.disable();
+        return false;
+    }
+
+    float pilot_override_gain = 100;
+
+    if (pilot_override_gain <= 0) {
+        pilot_override_gain = 100;
+    }
+    pilot_override_gain *= 0.01f;
+    pilot_override_gain = constrain_float(pilot_override_gain, 0.1f, 10);
+    // TODO: determine a good value for pilot_override_gain and hard-code it
+
+
+    const float override_delta_cd = rover.channel_steer->get_control_in() * pilot_override_gain;
+
+    if (fabsf(override_delta_cd) > (float)channel_steer->get_dead_zone()) {
+        // stick mixing is allowed, and enabled, and there's an input on the user sticks
+
+        if (!_stick_mixing.is_active()) {
+            // init
+            if (is_positive(_desired_speed)) {
+                _stick_mixing.initial_speed = _desired_speed;
+            } else {
+                _stick_mixing.initial_speed = ahrs.groundspeed();
+            }
+        }
+
+        // new yaw demand is current_heading plus pilot input
+        _stick_mixing.yaw_cd = wrap_360_cd(ahrs.yaw_sensor + override_delta_cd);
+        _stick_mixing.time_start_ms = AP_HAL::millis();
+    }
+
+    if (_stick_mixing.is_active()) {
+        if (_stick_mixing.is_expired()) {
+            _stick_mixing.disable();
+        } else {
+            _reached_destination = false;
+            _desired_yaw_cd = _stick_mixing.yaw_cd;
+            _desired_speed = _stick_mixing.initial_speed;
+            calc_steering_from_turn_rate(ToRad(override_delta_cd*0.01f), _desired_speed, 0);
+            //Mode::calc_steering_to_heading(_desired_yaw_cd);
+            return true;
+        }
+    }
+
+    return false;
+}
+

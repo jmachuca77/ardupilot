@@ -255,6 +255,11 @@ bool Plane::set_mode(Mode &new_mode, const ModeReason reason)
             // ignore result because if we fail we risk looping at the qautotune check above
             control_mode->enter();
         }
+
+        // ensure ICE knows the mode was unsuccessful but we still allowed a start-up to be kicked off if configured to do so
+        // This allows us to start the engine on an autoNav mode change but even on a set_mode failure it will at least start the engine still
+        // This allows the engine to warm-up or systems that depend on vehicle battery power to boot-up while the user re-attempts the mode change
+        g2.ice_control.mode_change_or_new_autoNav_point_event(plane.auto_navigation_mode);
         return false;
     }
 

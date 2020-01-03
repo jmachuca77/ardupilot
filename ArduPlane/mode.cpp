@@ -12,6 +12,8 @@ void Mode::exit()
 
 bool Mode::enter()
 {
+    plane.g2.ice_control.mode_change_or_new_autoNav_point_event(plane.auto_navigation_mode);
+
     // cancel inverted flight
     plane.auto_state.inverted_flight = false;
 

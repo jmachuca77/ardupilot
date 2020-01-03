@@ -132,8 +132,21 @@ void Rover::radio_failsafe_check(uint16_t pwm)
     }
 
     bool failed = pwm < static_cast<uint16_t>(g.fs_throttle_value);
-    if (AP_HAL::millis() - failsafe.last_valid_rc_ms > 500) {
-        failed = true;
+
+    if (is_positive(g2.fs_throttle_timeout)) {
+        // param is enabled so we'll apply either a long-ish 1000ms timer or a user-defined one
+        const bool proximityAvoidanceEnabledAndHealty = control_mode->is_autopilot_mode() &&
+                                                        g2.proximity.sensor_enabled() &&        // param PRX_TYPE == 2
+                                                        g2.proximity.healthy() &&               // data has been received
+                                                        g2.avoid.feature_is_enabled(AC_AVOID_USE_PROXIMITY_SENSOR); // param AVOID_ENABLE is good
+
+        // if proximity avoidance is running, allow the timeout
+        // to be much larger because the vehicle should be able
+        // to protect itself and the surrounding puny humans
+        const uint32_t timeout_ms = proximityAvoidanceEnabledAndHealty ? 1000 : ((uint32_t)(g2.fs_throttle_timeout * 1000));
+        if (AP_HAL::millis() - failsafe.last_valid_rc_ms > timeout_ms) {
+            failed = true;
+        }
     }
     failsafe_trigger(FAILSAFE_EVENT_THROTTLE, "Radio", failed);
 }
