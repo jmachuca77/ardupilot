@@ -596,13 +596,11 @@ void GCS_MAVLINK::send_text_rate_limited(MAV_SEVERITY severity, const uint32_t i
         return;
     }
     ref_to_timetime_ms = now_ms;
-
-    char text[MAVLINK_MSG_STATUSTEXT_FIELD_TEXT_LEN+1];
+   
     va_list arg_list;
     va_start(arg_list, fmt);
-    hal.util->vsnprintf(text, sizeof(text), fmt, arg_list);
+    gcs().send_textv(severity, fmt, arg_list, (1<<chan));
     va_end(arg_list);
-    gcs().send_text(severity, text);
 }
 
 void GCS_MAVLINK::handle_radio_status(const mavlink_message_t &msg, bool log_radio)
