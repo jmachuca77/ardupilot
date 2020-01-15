@@ -875,7 +875,7 @@ public:
 
     void send_text_rate_limited(MAV_SEVERITY severity, const uint32_t interval_ms, uint32_t &ref_to_timetime_ms, const char *fmt, ...);
     virtual void send_statustext(MAV_SEVERITY severity, uint8_t dest_bitmask, const char *text);
-    void service_statustext(void);
+    
     virtual GCS_MAVLINK *chan(const uint8_t ofs) = 0;
     virtual const GCS_MAVLINK *chan(const uint8_t ofs) const = 0;
     // return the number of valid GCS objects
