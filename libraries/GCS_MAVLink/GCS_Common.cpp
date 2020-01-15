@@ -602,7 +602,7 @@ void GCS_MAVLINK::send_text_rate_limited(MAV_SEVERITY severity, const uint32_t i
     va_start(arg_list, fmt);
     hal.util->vsnprintf(text, sizeof(text), fmt, arg_list);
     va_end(arg_list);
-    gcs().send_statustext(severity, (1<<chan), text);
+    gcs().send_text(severity, text);
 }
 
 void GCS_MAVLINK::handle_radio_status(const mavlink_message_t &msg, bool log_radio)
