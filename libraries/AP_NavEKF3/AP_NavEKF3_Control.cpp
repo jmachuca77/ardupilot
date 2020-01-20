@@ -516,6 +516,7 @@ bool NavEKF3_core::setOriginLLH(const Location &loc)
 {
     if ((PV_AidingMode == AID_ABSOLUTE) && (frontend->_fusionModeGPS != 3)) {
         // reject attempt to set origin if GPS is being used
+        gcs().send_text(MAV_SEVERITY_WARNING, "EKF3 Origin set failed, GPS in use");
         return false;
     }
     EKF_origin = loc;

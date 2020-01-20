@@ -1171,19 +1171,22 @@ bool NavEKF3::getOriginLLH(int8_t instance, struct Location &loc) const
 bool NavEKF3::setOriginLLH(const Location &loc)
 {
     if (!core) {
+        gcs().send_text(MAV_SEVERITY_WARNING, "EKF3: error getting core");
         return false;
     }
     if (_fusionModeGPS != 3) {
         // we don't allow setting of the EKF origin unless we are
         // flying in non-GPS mode. This is to prevent accidental set
         // of EKF origin with invalid position or height
-        gcs().send_text(MAV_SEVERITY_WARNING, "EKF3 refusing set origin");
+        gcs().send_text(MAV_SEVERITY_WARNING, "EKF3: refusing set origin");
         return false;
     }
     bool ret = false;
     for (uint8_t i=0; i<num_cores; i++) {
         ret |= core[i].setOriginLLH(loc);
     }
+    
+    gcs().send_text(MAV_SEVERITY_WARNING, "EKF3: setOriginLLH ret: %d", ret);
     // return true if any core accepts the new origin
     return ret;
 }

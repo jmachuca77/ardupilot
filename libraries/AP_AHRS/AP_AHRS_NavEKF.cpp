@@ -747,15 +747,18 @@ bool AP_AHRS_NavEKF::set_origin(const Location &loc)
     // return success if active EKF's origin was set
     switch (active_EKF_type()) {
     case EKFType::NONE:
+        gcs().send_text(MAV_SEVERITY_CRITICAL, "AHRS: error EKF type NONE");
         return false;
 
 #if HAL_NAVEKF2_AVAILABLE
     case EKFType::TWO:
+        gcs().send_text(MAV_SEVERITY_CRITICAL, "AHRS: EKF2: setOrigin %d",ret2);
         return ret2;
 #endif
 
 #if HAL_NAVEKF3_AVAILABLE
     case EKFType::THREE:
+        gcs().send_text(MAV_SEVERITY_CRITICAL, "AHRS: EKF3: setOrigin %d",ret3);
         return ret3;
 #endif
 

@@ -2856,6 +2856,7 @@ void GCS_MAVLINK::set_ekf_origin(const Location& loc)
 {
     // check location is valid
     if (!loc.check_latlng()) {
+        gcs().send_text(MAV_SEVERITY_WARNING, "Invalid Location");
         return;
     }
 
@@ -2864,10 +2865,12 @@ void GCS_MAVLINK::set_ekf_origin(const Location& loc)
     // check if EKF origin has already been set
     Location ekf_origin;
     if (ahrs.get_origin(ekf_origin)) {
+        gcs().send_text(MAV_SEVERITY_WARNING, "Origin already set");
         return;
     }
 
     if (!ahrs.set_origin(loc)) {
+        gcs().send_text(MAV_SEVERITY_WARNING, "EKF Set origin returned false");
         return;
     }
 
@@ -2878,6 +2881,7 @@ void GCS_MAVLINK::set_ekf_origin(const Location& loc)
         // try again later
         send_message(MSG_ORIGIN);
     }
+    gcs().send_text(MAV_SEVERITY_WARNING, "EKF Set origin done");
 }
 
 void GCS_MAVLINK::handle_set_gps_global_origin(const mavlink_message_t &msg)
@@ -2888,6 +2892,7 @@ void GCS_MAVLINK::handle_set_gps_global_origin(const mavlink_message_t &msg)
     // sanity check location
     if (!check_latlng(packet.latitude, packet.longitude)) {
         // silently drop the request
+        gcs().send_text(MAV_SEVERITY_WARNING, "Invalid location");
         return;
     }
 
