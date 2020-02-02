@@ -194,19 +194,6 @@ void Rover::proximity_update(void)
         rover.set_mode(rover.mode_hold, ModeReason::PROXIMITY_FAILSAFE);
     }
 }
-/*
-  setup is called when the sketch starts
- */
-void Rover::setup()
-{
-    // load the default values of variables listed in var_info[]
-    AP_Param::setup_sketch_defaults();
-
-    init_ardupilot();
-
-    // initialise the main loop scheduler
-    scheduler.init(&scheduler_tasks[0], ARRAY_SIZE(scheduler_tasks), MASK_LOG_PM);
-}
 
 // update AHRS system
 void Rover::ahrs_update()
