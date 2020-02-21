@@ -341,7 +341,7 @@ void RC_Channel::set_override(const uint16_t v, const uint32_t source, const uin
         return;
     }
 
-    last_override_time = timestamp_ms != 0 ? timestamp_ms : AP_HAL::millis();
+    //last_override_time = timestamp_ms != 0 ? timestamp_ms : AP_HAL::millis();
     const uint32_t timestamp = timestamp_us != 0 ? timestamp_us : AP_HAL::millis();
 
     switch (source) {
