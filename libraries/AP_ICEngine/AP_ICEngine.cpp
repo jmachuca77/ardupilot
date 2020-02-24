@@ -441,7 +441,7 @@ void AP_ICEngine::update_self_charging()
             gcs().send_text(MAV_SEVERITY_INFO, "%sOff", recharge.msg);
             // uncontrolled finish
             if (AP::arming().is_armed() && (AP::arming().get_armed_method() == AP_Arming::Method::ICE_RECHARGE)) {
-                AP::arming().disarm();
+                AP::arming().disarm(AP_Arming::Method::ICE_RECHARGE);
             }
         }
         recharge.set_state(Recharge::ICE_RECHARGE_STATE_OFF);
@@ -511,7 +511,7 @@ void AP_ICEngine::update_self_charging()
             } else if (now_ms - recharge.timer_ms >= ((uint32_t)recharge.duration_seconds * 1000)) {
                 // controlled finish
                 if (AP::arming().is_armed() && (AP::arming().get_armed_method() == AP_Arming::Method::ICE_RECHARGE)) {
-                    AP::arming().disarm();
+                    AP::arming().disarm(AP_Arming::Method::ICE_RECHARGE);
                 }
 
                 gcs().send_text(MAV_SEVERITY_INFO, "%s%.2fV, Done", recharge.msg, battery_voltage);

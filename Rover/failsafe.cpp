@@ -47,7 +47,7 @@ void Rover::failsafe_check()
         if (i/imax > 0.95f) {
             // our PID.I is at 95% of our PID.IMAX. Something is wrong.
             gcs().send_text(MAV_SEVERITY_CRITICAL, "FAILSAFE: Steering PID Integrator out of bounds");
-            arming.disarm();
+            arming.disarm(AP_Arming::Method::STEERPIDOUTOFBOUNDS);
         }
     }
 
@@ -56,7 +56,7 @@ void Rover::failsafe_check()
         const float imax = g2.attitude_control.get_throttle_speed_pid().imax();
         if (i/imax > 0.95f) {
             gcs().send_text(MAV_SEVERITY_CRITICAL, "FAILSAFE: Throttle PID Integrator out of bounds");
-            arming.disarm();
+            arming.disarm(AP_Arming::Method::THRPIDOUTOFBOUNDS);
         }
     }
 
