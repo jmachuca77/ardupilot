@@ -209,7 +209,7 @@ const AP_Param::GroupInfo SITL::var_info2[] = {
     // minimum throttle for simulated ins noise
     AP_GROUPINFO("INS_THR_MIN", 62, SITL,  ins_noise_throttle_min, 0.1f),
     // amplitude scaling of motor noise relative to gyro/accel noise
-    AP_GROUPINFO("VIB_MOT_MULT", 63, SITL,  vibe_motor_scale, 1.0f),
+    //AP_GROUPINFO("VIB_MOT_MULT", 63, SITL,  vibe_motor_scale, 1.0f),
 
     // @Group: ICE_
     // @Path: ./SIM_ICEngine.cpp
