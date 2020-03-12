@@ -19,108 +19,58 @@
 #pragma once
 
 #include <AP_HAL/AP_HAL.h>
-#include <AP_RPM/AP_RPM.h>
+#include <AP_Param/AP_Param.h>
+#include <SRV_Channel/SRV_Channel.h>
+#include <GCS_MAVLink/GCS.h>
+#include <AP_Vehicle/AP_Vehicle_Type.h>
 
 class AP_ICEngine {
 public:
     // constructor
-    AP_ICEngine(const AP_RPM &_rpm);
+    AP_ICEngine();
+
+    /* Do not allow copies */
+    AP_ICEngine(const AP_ICEngine &other) = delete;
+    AP_ICEngine &operator=(const AP_ICEngine&) = delete;
 
     static const struct AP_Param::GroupInfo var_info[];
 
     // update engine state. Should be called at 10Hz or more
-    void update(void);
+    void update(void) { if (enable) { enable = 0; } }
 
-    // check for throttle override
-    bool throttle_override(uint8_t &percent);
 
-    enum ICE_State {
-        ICE_OFF=0,
-        ICE_START_HEIGHT_DELAY=1,
-        ICE_START_DELAY=2,
-        ICE_STARTING=3,
-        ICE_RUNNING=4
-    };
-
-    // get current engine control state
-    ICE_State get_state(void) const { return state; }
-
-    // handle DO_ENGINE_CONTROL messages via MAVLink or mission
-    bool engine_control(float start_control, float cold_start, float height_delay);
-
-    // update min throttle for idle governor
-    void update_idle_governor(int8_t &min_throttle);
-
+    void init(bool value) { }
+    void set_is_in_auto_mode(bool modeIsAnyAutoNav) { }
+    void auto_mode_change_or_new_guided_point_event() {}
+    void set_current_throttle(const float throttle) { }
     static AP_ICEngine *get_singleton() { return _singleton; }
+    void set_is_waiting_in_auto(bool value) { }
+    bool brake_override(float &brake_percent, const float desired_speed, const bool speed_is_valid, const float speed) { return false; }
+    bool throttle_override(float &percent) { return false; }
+    bool engine_control(float start_control, float cold_start, float height_delay, float gear_state_f) { return false; }
+    bool handle_message(const mavlink_command_long_t &packt) { return false; }
+    bool handle_set_ice_transmission_state(const mavlink_command_long_t &packet) { return false; }
+    bool enabled() const { return false; }
+    bool is_changing_gears() { return false; }
+    bool has_gears() { return false; }
+    bool gear_is_park() { return false; }
+    bool gear_is_forward() { return false; }
+    bool gear_is_reverse() { return false; }
+    bool gear_is_neutral() { return false; }
+    bool is_waiting_in_auto() { return false; }
+    bool gear_is_inhibiting_locomotion() { return false; }
+    float get_idle_throttle() { return 0; }
+    void update_idle_governor(int8_t min_throttle) { }
+    void mode_change_or_new_autoNav_point_event(bool modeIsAnyAutoNav) { }
+
+
+
 
 private:
     static AP_ICEngine *_singleton;
 
-    const AP_RPM &rpm;
-
-    enum ICE_State state;
-
     // enable library
     AP_Int8 enable;
-
-    // channel for pilot to command engine start, 0 for none
-    AP_Int8 start_chan;
-
-    // which RPM instance to use
-    AP_Int8 rpm_instance;
-    
-    // time to run starter for (seconds)
-    AP_Float starter_time;
-
-    // delay between start attempts (seconds)
-    AP_Float starter_delay;
-    
-    // pwm values 
-    AP_Int16 pwm_ignition_on;
-    AP_Int16 pwm_ignition_off;
-    AP_Int16 pwm_starter_on;
-    AP_Int16 pwm_starter_off;
-    
-    // RPM above which engine is considered to be running
-    AP_Int32 rpm_threshold;
-
-    // time when we started the starter
-    uint32_t starter_start_time_ms;
-
-    // time when we last ran the starter
-    uint32_t starter_last_run_ms;
-
-    // throttle percentage for engine start
-    AP_Int8 start_percent;
-
-    // throttle percentage for engine idle
-    AP_Int8 idle_percent;
-
-    // Idle Controller RPM setpoint
-    AP_Int16 idle_rpm;
-
-    // Idle Controller RPM deadband
-    AP_Int16 idle_db;
-
-    // Idle Controller Slew Rate
-    AP_Float idle_slew;
-    
-    // height when we enter ICE_START_HEIGHT_DELAY
-    float initial_height;
-
-    // height change required to start engine
-    float height_required;
-
-    // we are waiting for valid height data
-    bool height_pending:1;
-
-    // idle governor
-    float idle_governor_integrator;
-
-    enum class Options : uint16_t {
-        DISABLE_IGNITION_RC_FAILSAFE=(1U<<0),
-    };
-    AP_Int16 options;
 };
 
 
