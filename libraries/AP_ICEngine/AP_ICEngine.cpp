@@ -614,10 +614,10 @@ void AP_ICEngine::determine_state()
         state = ICE_OFF;
     }
 
-    int32_t current_rpm = -1;
+    float current_rpm = -1;
     AP_RPM *rpm = AP::rpm();
     if (rpm_instance > 0 && rpm != nullptr) {
-        current_rpm = (int32_t)rpm->get_rpm(rpm_instance-1);
+        rpm->get_rpm(rpm_instance-1, current_rpm);
     }
 
     // switch on current state to work out new state
