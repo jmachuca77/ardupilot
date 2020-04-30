@@ -344,7 +344,7 @@ private:
     AP_Int16 power_up_time;
     uint32_t engine_power_up_wait_ms;
 
-#if !APM_BUILD_TYPE(APM_BUILD_APMrover2)
+#if !APM_BUILD_TYPE(APM_BUILD_Rover)
     // height when we enter ICE_START_HEIGHT_DELAY
     float initial_height;
 

@@ -27,7 +27,7 @@
 
 extern const AP_HAL::HAL& hal;
 
-#if APM_BUILD_TYPE(APM_BUILD_APMrover2)
+#if APM_BUILD_TYPE(APM_BUILD_Rover)
     #define AP_ICENGINE_TEMP_TOO_HOT_THROTTLE_REDUCTION_FACTOR_DEFAULT  0.25f
 #elif APM_BUILD_TYPE(APM_BUILD_ArduPlane)
     #define AP_ICENGINE_TEMP_TOO_HOT_THROTTLE_REDUCTION_FACTOR_DEFAULT  0.75f
@@ -633,7 +633,7 @@ void AP_ICEngine::determine_state()
         }
         break;
 
-#if !APM_BUILD_TYPE(APM_BUILD_APMrover2)
+#if !APM_BUILD_TYPE(APM_BUILD_Rover)
     case ICE_START_HEIGHT_DELAY: {
         // NOTE, this state can only be achieved via MAVLink command so the starter RCin is not checked
         Vector3f pos;
@@ -1049,7 +1049,7 @@ bool AP_ICEngine::engine_control(float start_control, float cold_start, float he
         }
     }
 
-#if !APM_BUILD_TYPE(APM_BUILD_APMrover2)
+#if !APM_BUILD_TYPE(APM_BUILD_Rover)
     if (height_delay > 0) {
         height_pending = true;
         initial_height = 0;
