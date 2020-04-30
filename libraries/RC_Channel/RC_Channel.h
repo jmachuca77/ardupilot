@@ -375,14 +375,14 @@ public:
     }
 
     //  Might need to remove CHECK
-    float override_timeout_ms() const {
-        return _override_timeout.get() * 1e3f;
-    }
+    // float override_timeout_ms() const {
+    //     return _override_timeout.get() * 1e3f;
+    // }
 
     float override_timeout1_ms() const {
         return _override_timeout1.get() * 1e3f;
     }
-    
+
     float override_timeout2_ms() const {
         return _override_timeout2.get() * 1e3f;
     }
