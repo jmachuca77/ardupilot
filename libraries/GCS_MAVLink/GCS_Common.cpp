@@ -35,6 +35,7 @@
 #include <AP_RTC/AP_RTC.h>
 #include <AP_Scheduler/AP_Scheduler.h>
 #include <AP_SerialManager/AP_SerialManager.h>
+#include <AP_RCTelemetry/AP_Spektrum_Telem.h>
 #include <AP_Mount/AP_Mount.h>
 #include <AP_Common/AP_FWVersion.h>
 #include <AP_VisualOdom/AP_VisualOdom.h>
@@ -1870,7 +1871,12 @@ void GCS::send_textv(MAV_SEVERITY severity, const char *fmt, va_list arg_list, u
     if (frsky != nullptr) {
         frsky->queue_message(severity, first_piece_of_text);
     }
-
+#if HAL_SPEKTRUM_TELEM_ENABLED
+    AP_Spektrum_Telem* spektrum = AP::spektrum_telem();
+    if (spektrum != nullptr) {
+        spektrum->queue_message(severity, first_piece_of_text);
+    }
+#endif
     AP_Notify *notify = AP_Notify::get_singleton();
     if (notify) {
         notify->send_text(first_piece_of_text);
@@ -2054,7 +2060,6 @@ void GCS::setup_uarts()
             frsky = nullptr;
         }
     }
-
 #if !HAL_MINIMIZE_FEATURES
     ltm_telemetry.init();
     devo_telemetry.init();
