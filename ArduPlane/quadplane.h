@@ -89,6 +89,7 @@ public:
     bool verify_vtol_land(void);
     bool in_vtol_auto(void) const;
     bool in_vtol_mode(void) const;
+    bool in_vtol_posvel_mode(void) const;
     void update_throttle_hover();
 
     // vtol help for is_flying()
@@ -388,6 +389,9 @@ private:
         uint32_t land_start_ms;
         float vpos_start_m;
     } landing_detect;
+
+    // throttle mix acceleration filter
+    LowPassFilterVector3f throttle_mix_accel_ef_filter = LowPassFilterVector3f(1.0f);
 
     // time we last set the loiter target
     uint32_t last_loiter_ms;
