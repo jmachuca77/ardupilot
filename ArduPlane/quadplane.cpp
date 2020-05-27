@@ -827,52 +827,53 @@ void QuadPlane::multicopter_attitude_rate_update(float yaw_rate_cds)
 {
     check_attitude_relax();
 
-    // tailsitter-only body-frame roll control options
-    // Angle mode attitude control for pitch and body-frame roll, rate control for euler yaw.
-    if (is_tailsitter() &&
-        (tailsitter.input_type & TAILSITTER_INPUT_BF_ROLL)) {
-
-        if (!(tailsitter.input_type & TAILSITTER_INPUT_PLANE)) {
-            // In multicopter input mode, the roll and yaw stick axes are independent of pitch
-            attitude_control->input_euler_rate_yaw_euler_angle_pitch_bf_roll(false,
-                                                                             plane.nav_roll_cd,
-                                                                             plane.nav_pitch_cd,
-                                                                             yaw_rate_cds);
-            return;
-        } else {
-            // In plane input mode, the roll and yaw sticks are swapped
-            // and their effective axes rotate from yaw to roll and vice versa
-            // as pitch goes from zero to 90.
-            // So it is necessary to also rotate their scaling.
-
-            // Get the roll angle and yaw rate limits
-            int16_t roll_limit = aparm.angle_max;
-            // separate limit for tailsitter roll, if set
-            if (tailsitter.max_roll_angle > 0) {
-                roll_limit = tailsitter.max_roll_angle * 100.0f;
-            }
-            // Prevent a divide by zero
-            float yaw_rate_limit = ((yaw_rate_max < 1.0f) ? 1 : yaw_rate_max) * 100.0f;
-            float yaw2roll_scale = roll_limit / yaw_rate_limit;
-
-            // Rotate as a function of Euler pitch and swap roll/yaw
-            float euler_pitch = radians(.01f * plane.nav_pitch_cd);
-            float spitch = fabsf(sinf(euler_pitch));
-            float y2r_scale = linear_interpolate(1, yaw2roll_scale, spitch, 0, 1);
-
-            float p_yaw_rate = plane.nav_roll_cd / y2r_scale;
-            float p_roll_angle = -y2r_scale * yaw_rate_cds;
-
-            attitude_control->input_euler_rate_yaw_euler_angle_pitch_bf_roll(true,
-                                                                             p_roll_angle,
-                                                                             plane.nav_pitch_cd,
-                                                                             p_yaw_rate);
-            return;
-        }
-    }
-
     // normal control modes for VTOL and FW flight
-    if (in_vtol_mode() || is_tailsitter()) {
+    if (in_vtol_mode()) {
+
+        // tailsitter-only body-frame roll control options
+        // Angle mode attitude control for pitch and body-frame roll, rate control for euler yaw.
+        if (is_tailsitter() &&
+            (tailsitter.input_type & TAILSITTER_INPUT_BF_ROLL)) {
+
+            if (!(tailsitter.input_type & TAILSITTER_INPUT_PLANE)) {
+                // In multicopter input mode, the roll and yaw stick axes are independent of pitch
+                attitude_control->input_euler_rate_yaw_euler_angle_pitch_bf_roll(false,
+                                                                                plane.nav_roll_cd,
+                                                                                plane.nav_pitch_cd,
+                                                                                yaw_rate_cds);
+                return;
+            } else {
+                // In plane input mode, the roll and yaw sticks are swapped
+                // and their effective axes rotate from yaw to roll and vice versa
+                // as pitch goes from zero to 90.
+                // So it is necessary to also rotate their scaling.
+
+                // Get the roll angle and yaw rate limits
+                int16_t roll_limit = aparm.angle_max;
+                // separate limit for tailsitter roll, if set
+                if (tailsitter.max_roll_angle > 0) {
+                    roll_limit = tailsitter.max_roll_angle * 100.0f;
+                }
+                // Prevent a divide by zero
+                float yaw_rate_limit = ((yaw_rate_max < 1.0f) ? 1 : yaw_rate_max) * 100.0f;
+                float yaw2roll_scale = roll_limit / yaw_rate_limit;
+
+                // Rotate as a function of Euler pitch and swap roll/yaw
+                float euler_pitch = radians(.01f * plane.nav_pitch_cd);
+                float spitch = fabsf(sinf(euler_pitch));
+                float y2r_scale = linear_interpolate(1, yaw2roll_scale, spitch, 0, 1);
+
+                float p_yaw_rate = plane.nav_roll_cd / y2r_scale;
+                float p_roll_angle = -y2r_scale * yaw_rate_cds;
+
+                attitude_control->input_euler_rate_yaw_euler_angle_pitch_bf_roll(true,
+                                                                                p_roll_angle,
+                                                                                plane.nav_pitch_cd,
+                                                                                p_yaw_rate);
+                return;
+            }
+        }
+
         // use euler angle attitude control
         attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw(plane.nav_roll_cd,
                                                                       plane.nav_pitch_cd,
@@ -881,7 +882,12 @@ void QuadPlane::multicopter_attitude_rate_update(float yaw_rate_cds)
         // use the fixed wing desired rates
         float roll_rate = plane.rollController.get_pid_info().target;
         float pitch_rate = plane.pitchController.get_pid_info().target;
-        attitude_control->input_rate_bf_roll_pitch_yaw_2(roll_rate*100.0f, pitch_rate*100.0f, yaw_rate_cds);
+        if (is_tailsitter()) {
+            // tailsitter roll and yaw swapped due to change in reference frame
+            attitude_control->input_rate_bf_roll_pitch_yaw_2(yaw_rate_cds,pitch_rate*100.0f, -roll_rate*100.0f);
+        } else {
+            attitude_control->input_rate_bf_roll_pitch_yaw_2(roll_rate*100.0f, pitch_rate*100.0f, yaw_rate_cds);
+        }
     }
 }
 
@@ -900,7 +906,12 @@ void QuadPlane::hold_stabilize(float throttle_in)
         }
     } else {
         motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
-        attitude_control->set_throttle_out(throttle_in, true, 0);
+        bool should_boost = true;
+        if (is_tailsitter() && assisted_flight) {
+            // tailsitters in forward flight should not use angle boost
+            should_boost = false;
+        }
+        attitude_control->set_throttle_out(throttle_in, should_boost, 0);
     }
 }
 
@@ -1436,16 +1447,16 @@ float QuadPlane::desired_auto_yaw_rate_cds(void) const
 /*
   return true if the quadplane should provide stability assistance
  */
-bool QuadPlane::assistance_needed(float aspeed)
+bool QuadPlane::assistance_needed(float aspeed, bool have_airspeed)
 {
-    if (assist_speed <= 0) {
+    if (assist_speed <= 0 || is_contol_surface_tailsitter()) {
         // assistance disabled
         in_angle_assist = false;
         angle_error_start_ms = 0;
         return false;
     }
 
-    if (aspeed < assist_speed) {
+    if (have_airspeed && aspeed < assist_speed) {
         // assistance due to Q_ASSIST_SPEED
         in_angle_assist = false;
         angle_error_start_ms = 0;
@@ -1519,6 +1530,14 @@ bool QuadPlane::assistance_needed(float aspeed)
     return ret;
 }
 
+// return true if it is safe to provide assistance
+bool QuadPlane::assistance_safe()
+{
+    return hal.util->get_soft_armed() && ( (plane.auto_throttle_mode && !plane.throttle_suppressed)
+                                                                      || plane.get_throttle_input()>0 
+                                                                      || plane.is_flying() );
+}
+
 /*
   update for transition from quadplane to fixed wing mode
  */
@@ -1559,26 +1578,24 @@ void QuadPlane::update_transition(void)
     if (is_tailsitter() && transition_state == TRANSITION_AIRSPEED_WAIT) {
         transition_state = TRANSITION_ANGLE_WAIT_FW;
     }
-    
+
     /*
       see if we should provide some assistance
      */
-    if (have_airspeed &&
-        assistance_needed(aspeed) &&
-        !is_tailsitter() &&
-        hal.util->get_soft_armed() &&
-        ((plane.auto_throttle_mode && !plane.throttle_suppressed) ||
-         plane.get_throttle_input()>0 ||
-         plane.is_flying())) {
+    if (assistance_safe() && (q_assist_state == Q_ASSIST_STATE_ENUM::Q_ASSIST_FORCE ||
+        (q_assist_state == Q_ASSIST_STATE_ENUM::Q_ASSIST_ENABLED && assistance_needed(aspeed, have_airspeed)))) {
         // the quad should provide some assistance to the plane
-        if (transition_state != TRANSITION_AIRSPEED_WAIT) {
-            gcs().send_text(MAV_SEVERITY_INFO, "Transition started airspeed %.1f", (double)aspeed);
-        }
-        transition_state = TRANSITION_AIRSPEED_WAIT;
-        if (transition_start_ms == 0) {
-            transition_start_ms = now;
-        }
         assisted_flight = true;
+        if (!is_tailsitter()) {
+            // update tansition state for vehicles using airspeed wait
+            if (transition_state != TRANSITION_AIRSPEED_WAIT) {
+                gcs().send_text(MAV_SEVERITY_INFO, "Transition started airspeed %.1f", (double)aspeed);
+            }
+            transition_state = TRANSITION_AIRSPEED_WAIT;
+            if (transition_start_ms == 0) {
+                transition_start_ms = now;
+            }
+        }
     } else {
         assisted_flight = false;
     }
@@ -1789,7 +1806,7 @@ void QuadPlane::update(void)
         const uint32_t now = AP_HAL::millis();
 
         assisted_flight = false;
-        
+
         // output to motors
         motors_output();
 
@@ -1804,6 +1821,13 @@ void QuadPlane::update(void)
             transition_start_ms = now;
         } else if (is_tailsitter() &&
                    transition_state == TRANSITION_ANGLE_WAIT_VTOL) {
+            float aspeed;
+            bool have_airspeed = ahrs.airspeed_estimate(aspeed);
+            // provide asistance in forward flight portion of tailsitter transision
+            if (assistance_safe() && (q_assist_state == Q_ASSIST_STATE_ENUM::Q_ASSIST_FORCE ||
+                (q_assist_state == Q_ASSIST_STATE_ENUM::Q_ASSIST_ENABLED && assistance_needed(aspeed, have_airspeed)))) {
+                assisted_flight = true;
+            }
             if (tailsitter_transition_vtol_complete()) {
                 /*
                   we have completed transition to VTOL as a tailsitter,
@@ -1969,7 +1993,7 @@ void QuadPlane::motors_output(bool run_rate_controller)
         return;
     }
 
-    if (in_tailsitter_vtol_transition()) {
+    if (in_tailsitter_vtol_transition() && !assisted_flight) {
         /*
           don't run the motor outputs while in tailsitter->vtol
           transition. That is taken care of by the fixed wing
