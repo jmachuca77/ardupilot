@@ -110,7 +110,6 @@ const AP_Scheduler::Task Plane::scheduler_tasks[] = {
 #if EFI_ENABLED
     SCHED_TASK(efi_update,             10,    200),
 #endif
-    SCHED_TASK(update_dynamic_notch,   50,    200),
 };
 
 void Plane::get_scheduler_tasks(const AP_Scheduler::Task *&tasks,
@@ -218,6 +217,8 @@ void Plane::update_logging2(void)
         Log_Write_Control_Tuning();
 #if HAL_GYROFFT_ENABLED
         gyro_fft.write_log_messages();
+#else
+        write_notch_log_messages();
 #endif
     }
     
@@ -555,6 +556,10 @@ void Plane::set_flight_stage(AP_Vehicle::FixedWing::FlightStage fs)
 void Plane::update_alt()
 {
     barometer.update();
+
+    if (quadplane.available()) {
+        quadplane.motors->set_air_density_ratio(barometer.get_air_density_ratio());
+    }
 
     // calculate the sink rate.
     float sink_rate;

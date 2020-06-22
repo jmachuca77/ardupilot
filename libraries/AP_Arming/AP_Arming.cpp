@@ -553,6 +553,11 @@ bool AP_Arming::rc_arm_checks(AP_Arming::Method method)
     }
 
     bool check_passed = true;
+    // ensure all rc channels have different functions
+    if (rc().duplicate_options_exist()) {
+        check_failed(ARMING_CHECK_PARAMETERS, true, "Duplicate Aux Switch Options");
+        check_passed = false;
+    }
     const RCMapper * rcmap = AP::rcmap();
     if (rcmap != nullptr) {
         if (!rc().arming_skip_checks_rpy()) {
@@ -1250,7 +1255,7 @@ bool AP_Arming::disarm_switch_checks(bool display_failure) const
 {
     const RC_Channel *chan = rc().find_channel_for_option(RC_Channel::AUX_FUNC::DISARM);
     if (chan != nullptr &&
-        chan->get_aux_switch_pos() == RC_Channel::aux_switch_pos_t::HIGH &&
+        chan->get_aux_switch_pos() == RC_Channel::AuxSwitchPos::HIGH &&
         (checks_to_perform & ARMING_CHECK_ALL)) {
         check_failed(display_failure, "Disarm Switch on");
         return false;
