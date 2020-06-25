@@ -692,8 +692,8 @@ void GCS_MAVLINK_Rover::handleMessage(const mavlink_message_t &msg)
     switch (msg.msgid) {
     case MAVLINK_MSG_ID_MANUAL_CONTROL:
     {
-        if (msg.sysid != rover.g.sysid_my_gcs) {  // Only accept control from our gcs
-            break;
+        if ((msg.sysid != rover.g.sysid_my_gcs) && (msg.sysid != rover.g.sysid_this_mav)){  
+            break; // Only accept control from our gcs and other components aboard this mav
         }
 
         mavlink_manual_control_t packet;

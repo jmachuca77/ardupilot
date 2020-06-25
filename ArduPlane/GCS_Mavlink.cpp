@@ -1213,8 +1213,8 @@ void GCS_MAVLINK_Plane::handleMessage(const mavlink_message_t &msg)
     
     case MAVLINK_MSG_ID_MANUAL_CONTROL:
     {
-        if (msg.sysid != plane.g.sysid_my_gcs) {
-            break; // only accept control from our gcs
+        if ((msg.sysid != plane.g.sysid_my_gcs) && (msg.sysid != plane.g.sysid_this_mav)){ 
+            break; // only accept control from our gcs and from other components aboard this mav
         }
 
         mavlink_manual_control_t packet;

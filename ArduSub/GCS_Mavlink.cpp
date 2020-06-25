@@ -532,8 +532,8 @@ void GCS_MAVLINK_Sub::handleMessage(const mavlink_message_t &msg)
     }
 
     case MAVLINK_MSG_ID_MANUAL_CONTROL: {     // MAV ID: 69
-        if (msg.sysid != sub.g.sysid_my_gcs) {
-            break;    // Only accept control from our gcs
+        if ((msg.sysid != sub.g.sysid_my_gcs) && (msg.sysid != sub.g.sysid_this_mav)){
+            break;    // Only accept control from our gcs and from other components aboard this mav
         }
         mavlink_manual_control_t packet;
         mavlink_msg_manual_control_decode(&msg, &packet);
