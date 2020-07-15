@@ -415,6 +415,8 @@ public:
 
     // returns true when we are knowingly stopped. This helps prevent crash detected false alarms
     bool is_waiting() const override { return reached_destination(); }
+    // set steering and throttle (-1 to +1).  Only called from scripts
+    void set_steering_and_throttle(float steering, float throttle);
 
     // vehicle start loiter
     bool start_loiter();
@@ -434,7 +436,8 @@ protected:
         Guided_HeadingAndSpeed,
         Guided_TurnRateAndSpeed,
         Guided_Loiter,
-    } _guided_mode;    // stores which GUIDED mode the vehicle is in;
+        Guided_SteeringAndThrottle
+    } _guided_mode;
 
     bool _enter() override;
 
@@ -444,6 +447,12 @@ protected:
     float _desired_yaw_rate_cds;// target turn rate centi-degrees per second
     bool sent_notification;     // used to send one time notification to ground station
     float _desired_speed;       // desired speed used only in HeadingAndSpeed submode
+
+    // direct steering and throttle control
+    bool _have_strthr;          // true if we have a valid direct steering and throttle inputs
+    uint32_t _strthr_time_ms;   // system time last call to set_steering_and_throttle was made (used for timeout)
+    float _strthr_steering;     // direct steering input in the range -1 to +1
+    float _strthr_throttle;     // direct throttle input in the range -1 to +1
 
     // limits
     struct {

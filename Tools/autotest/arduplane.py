@@ -512,14 +512,14 @@ class AutoTestPlane(AutoTest):
 
         return self.wait_level_flight()
 
-    def fly_mission(self, filename):
+    def fly_mission(self, filename, mission_timeout=60.0):
         """Fly a mission from a file."""
         self.progress("Flying mission %s" % filename)
         self.load_mission(filename)
         self.mavproxy.send('switch 1\n')  # auto mode
         self.wait_mode('AUTO')
         self.wait_waypoint(1, 7, max_dist=60)
-        self.wait_groundspeed(0, 0.5, timeout=60)
+        self.wait_groundspeed(0, 0.5, timeout=mission_timeout)
         self.mavproxy.expect("Auto disarmed")
         self.progress("Mission OK")
 
@@ -1745,6 +1745,16 @@ class AutoTestPlane(AutoTest):
 
         self.progress("Mission OK")
 
+    def fly_terrain_mission(self):
+
+        self.customise_SITL_commandline([], wipe=True)
+
+        self.mavproxy.send("wp set 1\n")
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+
+        self.fly_mission("ap-terrain.txt", mission_timeout=600)
+
     def tests(self):
         '''return list of all tests'''
         ret = super(AutoTestPlane, self).tests()
@@ -1853,6 +1863,10 @@ class AutoTestPlane(AutoTest):
             ("Soaring",
             "Test Soaring feature",
             self.fly_soaring),
+
+            ("Terrain",
+             "Test terrain following in mission",
+             self.fly_terrain_mission),
 
             ("LogUpload",
              "Log upload",

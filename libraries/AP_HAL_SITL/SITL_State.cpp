@@ -182,8 +182,7 @@ void SITL_State::_fdm_input_step(void)
         _update_gps(_sitl->state.latitude, _sitl->state.longitude,
                     _sitl->state.altitude,
                     _sitl->state.speedN, _sitl->state.speedE, _sitl->state.speedD,
-                    _sitl->state.yawDeg,
-                    !_sitl->gps_disable);
+                    _sitl->state.yawDeg, true);
         _update_airspeed(_sitl->state.airspeed);
         _update_rangefinder(_sitl->state.range);
 
@@ -262,6 +261,12 @@ int SITL_State::sim_fd(const char *name, const char *arg)
         }
         lightwareserial = new SITL::RF_LightWareSerial();
         return lightwareserial->fd();
+    } else if (streq(name, "lightwareserial-binary")) {
+        if (lightwareserial_binary != nullptr) {
+            AP_HAL::panic("Only one lightwareserial-binary at a time");
+        }
+        lightwareserial_binary = new SITL::RF_LightWareSerialBinary();
+        return lightwareserial_binary->fd();
     } else if (streq(name, "lanbao")) {
         if (lanbao != nullptr) {
             AP_HAL::panic("Only one lanbao at a time");
@@ -337,12 +342,27 @@ int SITL_State::sim_fd(const char *name, const char *arg)
     //     }
     //     frsky_sport = new SITL::Frsky_SPortPassthrough();
     //     return frsky_sportpassthrough->fd();
+    } else if (streq(name, "crsf")) {
+        if (crsf != nullptr) {
+            AP_HAL::panic("Only one crsf at a time");
+        }
+        crsf = new SITL::CRSF();
+        return crsf->fd();
     } else if (streq(name, "rplidara2")) {
         if (rplidara2 != nullptr) {
             AP_HAL::panic("Only one rplidara2 at a time");
         }
         rplidara2 = new SITL::PS_RPLidarA2();
         return rplidara2->fd();
+    } else if (streq(name, "richenpower")) {
+        sitl_model->set_richenpower(&_sitl->richenpower_sim);
+        return _sitl->richenpower_sim.fd();
+    } else if (streq(name, "gyus42v2")) {
+        if (gyus42v2 != nullptr) {
+            AP_HAL::panic("Only one gyus42v2 at a time");
+        }
+        gyus42v2 = new SITL::RF_GYUS42v2();
+        return gyus42v2->fd();
     }
 
     AP_HAL::panic("unknown simulated device: %s", name);
@@ -374,6 +394,11 @@ int SITL_State::sim_fd_write(const char *name)
             AP_HAL::panic("No lightwareserial created");
         }
         return lightwareserial->write_fd();
+    } else if (streq(name, "lightwareserial-binary")) {
+        if (lightwareserial_binary == nullptr) {
+            AP_HAL::panic("No lightwareserial_binary created");
+        }
+        return lightwareserial_binary->write_fd();
     } else if (streq(name, "lanbao")) {
         if (lanbao == nullptr) {
             AP_HAL::panic("No lanbao created");
@@ -424,11 +449,23 @@ int SITL_State::sim_fd_write(const char *name)
             AP_HAL::panic("No frsky-d created");
         }
         return frsky_d->write_fd();
+    } else if (streq(name, "crsf")) {
+        if (crsf == nullptr) {
+            AP_HAL::panic("No crsf created");
+        }
+        return crsf->write_fd();
     } else if (streq(name, "rplidara2")) {
         if (rplidara2 == nullptr) {
             AP_HAL::panic("No rplidara2 created");
         }
         return rplidara2->write_fd();
+    } else if (streq(name, "richenpower")) {
+        return _sitl->richenpower_sim.write_fd();
+    } else if (streq(name, "gyus42v2")) {
+        if (gyus42v2 == nullptr) {
+            AP_HAL::panic("No gyus42v2 created");
+        }
+        return gyus42v2->write_fd();
     }
     AP_HAL::panic("unknown simulated device: %s", name);
 }
@@ -579,6 +616,9 @@ void SITL_State::_fdm_input_local(void)
     if (lightwareserial != nullptr) {
         lightwareserial->update(sitl_model->get_range());
     }
+    if (lightwareserial_binary != nullptr) {
+        lightwareserial_binary->update(sitl_model->get_range());
+    }
     if (lanbao != nullptr) {
         lanbao->update(sitl_model->get_range());
     }
@@ -606,6 +646,9 @@ void SITL_State::_fdm_input_local(void)
     if (rf_mavlink != nullptr) {
         rf_mavlink->update(sitl_model->get_range());
     }
+    if (gyus42v2 != nullptr) {
+        gyus42v2->update(sitl_model->get_range());
+    }
 
     if (frsky_d != nullptr) {
         frsky_d->update();
@@ -616,6 +659,11 @@ void SITL_State::_fdm_input_local(void)
     // if (frsky_sportpassthrough != nullptr) {
     //     frsky_sportpassthrough->update();
     // }
+
+    if (crsf != nullptr) {
+        crsf->update();
+    }
+
     if (rplidara2 != nullptr) {
         rplidara2->update(sitl_model->get_location());
     }

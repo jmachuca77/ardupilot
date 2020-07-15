@@ -54,6 +54,8 @@ void NavEKF3_core::readRangeFinder(void)
                 }
                 storedRngMeasTime_ms[sensorIndex][rngMeasIndex[sensorIndex]] = imuSampleTime_ms - 25;
                 storedRngMeas[sensorIndex][rngMeasIndex[sensorIndex]] = sensor->distance_cm() * 0.01f;
+            } else {
+                continue;
             }
 
             // check for three fresh samples
@@ -704,8 +706,8 @@ void NavEKF3_core::readBaroData()
         baroDataNew.hgt = baro.get_altitude();
 
         // If we are in takeoff mode, the height measurement is limited to be no less than the measurement at start of takeoff
-        // This prevents negative baro disturbances due to copter downwash corrupting the EKF altitude during initial ascent
-        if (getTakeoffExpected()) {
+        // This prevents negative baro disturbances due to rotor wash ground interaction corrupting the EKF altitude during initial ascent
+        if (expectGndEffectTakeoff) {
             baroDataNew.hgt = MAX(baroDataNew.hgt, meaHgtAtTakeOff);
         }
 
@@ -1148,10 +1150,8 @@ float NavEKF3_core::MagDeclination(void) const
 */
 void NavEKF3_core::updateMovementCheck(void)
 {
-    if (!onGround &&
-        effectiveMagCal != MagCal::EXTERNAL_YAW &&
-        effectiveMagCal != MagCal::EXTERNAL_YAW_FALLBACK &&
-        effectiveMagCal != MagCal::GSF_YAW)
+    const bool runCheck = onGround && (effectiveMagCal == MagCal::EXTERNAL_YAW || effectiveMagCal == MagCal::EXTERNAL_YAW_FALLBACK || !use_compass());
+    if (!runCheck)
     {
         onGroundNotMoving = false;
         return;

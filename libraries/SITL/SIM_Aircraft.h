@@ -29,6 +29,7 @@
 #include "SIM_ICEngine.h"
 #include "SIM_Parachute.h"
 #include "SIM_Precland.h"
+#include "SIM_RichenPower.h"
 #include "SIM_Buzzer.h"
 #include <Filter/Filter.h>
 
@@ -138,6 +139,7 @@ public:
     void set_buzzer(Buzzer *_buzzer) { buzzer = _buzzer; }
     void set_sprayer(Sprayer *_sprayer) { sprayer = _sprayer; }
     void set_parachute(Parachute *_parachute) { parachute = _parachute; }
+    void set_richenpower(RichenPower *_richenpower) { richenpower = _richenpower; }
     void set_gripper_servo(Gripper_Servo *_gripper) { gripper = _gripper; }
     void set_gripper_epm(Gripper_EPM *_gripper_epm) { gripper_epm = _gripper_epm; }
     void set_precland(SIM_Precland *_precland);
@@ -299,6 +301,7 @@ protected:
     Gripper_Servo *gripper;
     Gripper_EPM *gripper_epm;
     Parachute *parachute;
+    RichenPower *richenpower;
     SIM_Precland *precland;
     ICEngine *icengine;
 };

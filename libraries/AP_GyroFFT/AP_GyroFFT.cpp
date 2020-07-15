@@ -249,17 +249,23 @@ void AP_GyroFFT::init(uint32_t target_looptime_us)
         return;
     }
 
+    // count the number of active harmonics
+    for (uint8_t i = 0; i < HNF_MAX_HARMONICS; i++) {
+        if (_ins->get_gyro_harmonic_notch_harmonics() & (1<<i)) {
+            _harmonics++;
+        }
+    }
+    _harmonics = constrain_int16(_harmonics, 1, FrequencyPeak::MAX_TRACKED_PEAKS);
+
     // calculate harmonic multiplier. this assumes the harmonics configured on the 
     // harmonic notch reflect the multiples of the fundamental harmonic that should be tracked
     uint8_t first_harmonic = 0;
-    _harmonics = 1; // always search for 1
     if (_harmonic_fit > 0) {
         for (uint8_t i = 0; i < HNF_MAX_HARMONICS; i++) {
             if (_ins->get_gyro_harmonic_notch_harmonics() & (1<<i)) {
                 if (first_harmonic == 0) {
                     first_harmonic = i + 1;
                 } else {
-                    _harmonics++;
                     _harmonic_multiplier = float(i + 1) / first_harmonic;
                     break;
                 }
@@ -402,7 +408,7 @@ uint16_t AP_GyroFFT::run_cycle()
     FloatBuffer& gyro_buffer = (_sample_mode == 0 ?_ins->get_raw_gyro_window(_update_axis) : _downsampled_gyro_data[_update_axis]);
     // if we have many more samples than the window size then we are struggling to 
     // stay ahead of the gyro loop so drop samples so that this cycle will use all available samples
-    if (gyro_buffer.available() > _state->_window_size + uint16_t(_samples_per_frame >> 1)) { // half the frame size is a heuristic
+    if (gyro_buffer.available() > uint32_t(_state->_window_size + uint16_t(_samples_per_frame >> 1))) { // half the frame size is a heuristic
         gyro_buffer.advance(gyro_buffer.available() - _state->_window_size);
     }
     // let's go!

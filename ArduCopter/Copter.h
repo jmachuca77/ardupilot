@@ -652,7 +652,6 @@ private:
     void twentyfive_hz_logging();
     void three_hz_loop();
     void one_hz_loop();
-    void update_GPS(void);
     void init_simple_bearing();
     void update_simple_mode(void);
     void update_super_simple_bearing(bool force_update);
@@ -677,6 +676,7 @@ private:
 
     // baro_ground_effect.cpp
     void update_ground_effect_detector(void);
+    void update_ekf_terrain_height_stable();
 
     // commands.cpp
     void update_home_from_EKF();

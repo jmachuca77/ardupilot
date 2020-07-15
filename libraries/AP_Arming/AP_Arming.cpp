@@ -32,6 +32,7 @@
 #include <AP_AHRS/AP_AHRS.h>
 #include <AP_Baro/AP_Baro.h>
 #include <AP_RangeFinder/AP_RangeFinder.h>
+#include <AP_Generator/AP_Generator_RichenPower.h>
 #include <AP_Terrain/AP_Terrain.h>
 #include <AP_Scripting/AP_Scripting.h>
 #include <AP_Camera/AP_RunCam.h>
@@ -72,7 +73,7 @@ extern const AP_HAL::HAL& hal;
 
 const AP_Param::GroupInfo AP_Arming::var_info[] = {
 
-    // @Param: REQUIRE
+    // @Param{Plane, Rover}: REQUIRE
     // @DisplayName: Require Arming Motors 
     // @Description: Arming disabled until some requirements are met. If 0, there are no requirements (arm immediately).  If 1, require rudder stick or GCS arming before arming motors and sends the minimum throttle PWM value to the throttle channel when disarmed.  If 2, require rudder stick or GCS arming and send 0 PWM to throttle channel when disarmed. See the ARMING_CHECK_* parameters to see what checks are done before arming. Note, if setting this parameter to 0 a reboot is required to arm the plane.  Also note, even with this parameter at 0, if ARMING_CHECK parameter is not also zero the plane may fail to arm throttle at boot due to a pre-arm check failure.
     // @Values: 0:Disabled,1:THR_MIN PWM when disarmed,2:0 PWM when disarmed
@@ -568,7 +569,7 @@ bool AP_Arming::rc_arm_checks(AP_Arming::Method method)
                 if (c == nullptr) {
                     continue;
                 }
-                if (!c->in_trim_dz()) {
+                if (c->get_control_in() != 0) {
                     if ((method != Method::RUDDER) || (c != rc().get_arming_channel())) { // ignore the yaw input channel if rudder arming
                         check_failed(ARMING_CHECK_RC, true, "%s (RC%d) is not neutral", names[i], channels[i]);
                         check_passed = false;
@@ -578,10 +579,19 @@ bool AP_Arming::rc_arm_checks(AP_Arming::Method method)
         }
 
         if (rc().arming_check_throttle()) {
-            const RC_Channel *c = rc().channel(rcmap->throttle() - 1);
+            RC_Channel *c = rc().channel(rcmap->throttle() - 1);
             if (c != nullptr) {
                 if (c->get_control_in() != 0) {
                     check_failed(ARMING_CHECK_RC, true, "Throttle (RC%d) is not neutral", rcmap->throttle());
+                    check_passed = false;
+                }
+            }
+            c = rc().find_channel_for_option(RC_Channel::AUX_FUNC::FWD_THR);
+            if (c != nullptr) {
+                uint8_t fwd_thr = c->percent_input();
+                // require channel input within 2% of minimum
+                if (fwd_thr > 2) {
+                    check_failed(ARMING_CHECK_RC, true, "VTOL Fwd Throttle is not zero");
                     check_passed = false;
                 }
             }
@@ -1050,6 +1060,22 @@ bool AP_Arming::aux_auth_checks(bool display_failure)
     return true;
 }
 
+bool AP_Arming::generator_checks(bool display_failure) const
+{
+#if GENERATOR_ENABLED
+    const AP_Generator_RichenPower *generator = AP::generator();
+    if (generator == nullptr) {
+        return true;
+    }
+    char failure_msg[50] = {};
+    if (!generator->pre_arm_check(failure_msg, sizeof(failure_msg))) {
+        check_failed(display_failure, "Generator: %s", failure_msg);
+        return false;
+    }
+#endif
+    return true;
+}
+
 bool AP_Arming::pre_arm_checks(bool report)
 {
 #if !APM_BUILD_TYPE(APM_BUILD_ArduCopter)
@@ -1075,6 +1101,7 @@ bool AP_Arming::pre_arm_checks(bool report)
         &  board_voltage_checks(report)
         &  system_checks(report)
         &  can_checks(report)
+        &  generator_checks(report)
         &  proximity_checks(report)
         &  camera_checks(report)
         &  visodom_checks(report)

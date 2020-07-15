@@ -28,6 +28,7 @@
 #include <SITL/SIM_RF_Benewake_TF03.h>
 #include <SITL/SIM_RF_Benewake_TFmini.h>
 #include <SITL/SIM_RF_LightWareSerial.h>
+#include <SITL/SIM_RF_LightWareSerialBinary.h>
 #include <SITL/SIM_RF_Lanbao.h>
 #include <SITL/SIM_RF_BLping.h>
 #include <SITL/SIM_RF_LeddarOne.h>
@@ -37,12 +38,15 @@
 #include <SITL/SIM_RF_Wasp.h>
 #include <SITL/SIM_RF_NMEA.h>
 #include <SITL/SIM_RF_MAVLink.h>
+#include <SITL/SIM_RF_GYUS42v2.h>
 
 #include <SITL/SIM_Frsky_D.h>
+#include <SITL/SIM_CRSF.h>
 // #include <SITL/SIM_Frsky_SPort.h>
 // #include <SITL/SIM_Frsky_SPortPassthrough.h>
 #include <SITL/SIM_PS_RPLidarA2.h>
 
+#include <SITL/SIM_RichenPower.h>
 #include <AP_HAL/utility/Socket.h>
 
 class HAL_SITL;
@@ -249,8 +253,10 @@ private:
     // simulated Benewake tfmini rangefinder:
     SITL::RF_Benewake_TFmini *benewake_tfmini;
 
-    // simulated LightWareSerial rangefinder:
+    // simulated LightWareSerial rangefinder - legacy protocol::
     SITL::RF_LightWareSerial *lightwareserial;
+    // simulated LightWareSerial rangefinder - binary protocol:
+    SITL::RF_LightWareSerialBinary *lightwareserial_binary;
     // simulated Lanbao rangefinder:
     SITL::RF_Lanbao *lanbao;
     // simulated BLping rangefinder:
@@ -269,6 +275,8 @@ private:
     SITL::RF_NMEA *nmea;
     // simulated MAVLink rangefinder:
     SITL::RF_MAVLink *rf_mavlink;
+    // simulated GYUS42v2 rangefinder:
+    SITL::RF_GYUS42v2 *gyus42v2;
 
     // simulated Frsky devices
     SITL::Frsky_D *frsky_d;
@@ -276,6 +284,9 @@ private:
     // SITL::Frsky_SPortPassthrough *frsky_sportpassthrough;
     // simulated NMEA rangefinder:
     SITL::PS_RPLidarA2 *rplidara2;
+
+    // simulated CRSF devices
+    SITL::CRSF *crsf;
 
     // output socket for flightgear viewing
     SocketAPM fg_socket{true};

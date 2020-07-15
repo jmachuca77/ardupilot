@@ -51,8 +51,8 @@ bool NavEKF3_core::setup_core(uint8_t _imu_index, uint8_t _core_index)
      */
 
     // Calculate the expected EKF time step
-    if (AP::ins().get_sample_rate() > 0) {
-        dtEkfAvg = 1.0f / AP::ins().get_sample_rate();
+    if (AP::ins().get_loop_rate_hz() > 0) {
+        dtEkfAvg = 1.0f / AP::ins().get_loop_rate_hz();
         dtEkfAvg = MAX(dtEkfAvg,EKF_TARGET_DT);
     } else {
         return false;
@@ -225,7 +225,6 @@ void NavEKF3_core::InitialiseVariables()
     lastVelReset_ms = 0;
     lastPosResetD_ms = 0;
     lastRngMeasTime_ms = 0;
-    terrainHgtStableSet_ms = 0;
 
     // initialise other variables
     gpsNoiseScaler = 1.0f;
@@ -270,8 +269,9 @@ void NavEKF3_core::InitialiseVariables()
     gndOffsetValid =  false;
     validOrigin = false;
     takeoffExpectedSet_ms = 0;
-    expectGndEffectTakeoff = false;
+    expectTakeoff = false;
     touchdownExpectedSet_ms = 0;
+    expectGndEffectTakeoff = false;
     expectGndEffectTouchdown = false;
     gpsSpdAccuracy = 0.0f;
     gpsPosAccuracy = 0.0f;
@@ -439,6 +439,7 @@ void NavEKF3_core::InitialiseVariables()
     EKFGSF_yaw_reset_request_ms = 0;
     EKFGSF_yaw_reset_count = 0;
     EKFGSF_run_filterbank = false;
+    EKFGSF_yaw_valid_count = 0;
 
     effectiveMagCal = effective_magCal();
 }

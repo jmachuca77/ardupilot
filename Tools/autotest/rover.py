@@ -2985,6 +2985,8 @@ Brakes have negligible effect (with=%0.2fm without=%0.2fm delta=%0.2fm)
             self.upload_using_mission_protocol(mavutil.mavlink.MAV_MISSION_TYPE_RALLY,
                                                items)
             self.progress("ensure a mavlink1 connection can't do anything useful with new item types")
+            self.set_parameter("SERIAL2_PROTOCOL", 1)
+            self.reboot_sitl()
             mav2 = mavutil.mavlink_connection("tcp:localhost:5763",
                                               robust_parsing=True,
                                               source_system = 7,
@@ -2999,6 +3001,7 @@ Brakes have negligible effect (with=%0.2fm without=%0.2fm delta=%0.2fm)
                 want_type=mavutil.mavlink.MAV_MISSION_UNSUPPORTED,
                 mav=mav2,
             )
+            # this relies on magic upgrade to serial2:
             self.set_parameter("SERIAL2_PROTOCOL", 2)
             expected_count = 3
             self.progress("Assert mission count on new link")
@@ -3336,6 +3339,7 @@ Brakes have negligible effect (with=%0.2fm without=%0.2fm delta=%0.2fm)
         self.mavproxy.expect("Loaded module rally")
         self.mavproxy.send('module load wp\n')
         self.mavproxy.expect("Loaded module wp")
+        self.reboot_sitl()
 
     def test_gcs_mission(self):
         target_system = 1
@@ -4932,6 +4936,37 @@ Brakes have negligible effect (with=%0.2fm without=%0.2fm delta=%0.2fm)
                 return # success!
         raise NotAchievedException("Did not get expected text")
 
+    def test_scripting_steering_and_throttle(self):
+        self.start_subtest("Scripting square")
+        ex = None
+        example_script = "rover-set-steering-and-throttle.lua"
+        try:
+            self.install_example_script(example_script)
+            self.set_parameter("SCR_ENABLE", 1)
+            self.reboot_sitl()
+            self.wait_ready_to_arm()
+            self.arm_vehicle()
+            self.set_rc(6, 2000)
+            tstart = self.get_sim_time()
+            while not self.mode_is("HOLD"):
+                if self.get_sim_time_cached() - tstart > 30:
+                    raise NotAchievedException("Did not move to hold")
+                m = self.mav.recv_match(type='VFR_HUD', blocking=True, timeout=1)
+                if m is not None:
+                    self.progress("Current speed: %f" % m.groundspeed)
+            self.disarm_vehicle()
+            self.reboot_sitl()
+        except Exception as e:
+            self.progress("Caught exception: %s" %
+                          self.get_exception_stacktrace(e))
+            self.disarm_vehicle()
+            ex = e
+        self.remove_example_script(example_script)
+        self.reboot_sitl()
+
+        if ex is not None:
+            raise ex
+
     def test_scripting(self):
         self.test_scripting_hello_world()
         self.test_scripting_simple_loop()
@@ -5224,6 +5259,10 @@ Brakes have negligible effect (with=%0.2fm without=%0.2fm delta=%0.2fm)
              "Scripting test",
              self.test_scripting),
 
+            ("ScriptingSteeringAndThrottle",
+             "Scripting test - steering and throttle",
+             self.test_scripting_steering_and_throttle),
+
             ("MissionFrames",
              "Upload/Download of items in different frames",
              self.test_mission_frames),
@@ -5240,7 +5279,6 @@ Brakes have negligible effect (with=%0.2fm without=%0.2fm delta=%0.2fm)
 
     def disabled_tests(self):
         return {
-            "PolyFenceObjectAvoidanceBendyRuler": "currently broken",
             "DriveMaxRCIN": "currently triggers Arithmetic Exception",
         }
 

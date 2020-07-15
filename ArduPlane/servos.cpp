@@ -511,9 +511,24 @@ void Plane::set_servos_controlled(void)
         // manual pass through of throttle while in GUIDED
         SRV_Channels::set_output_scaled(SRV_Channel::k_throttle, get_throttle_input(true));
     } else if (quadplane.in_vtol_mode()) {
-        // ask quadplane code for forward throttle
-        SRV_Channels::set_output_scaled(SRV_Channel::k_throttle, 
-            constrain_int16(quadplane.forward_throttle_pct(), min_throttle, max_throttle));
+        int16_t fwd_thr = 0;
+        // if armed and not spooled down ask quadplane code for forward throttle
+        if (quadplane.motors->armed() &&
+            quadplane.motors->get_desired_spool_state() != AP_Motors::DesiredSpoolState::SHUT_DOWN) {
+
+            fwd_thr = constrain_int16(quadplane.forward_throttle_pct(), min_throttle, max_throttle);
+        }
+        SRV_Channels::set_output_scaled(SRV_Channel::k_throttle, fwd_thr);
+    }
+
+    // let EKF know to start GSF yaw estimator before takeoff movement starts so that yaw angle is better estimated
+    const float throttle = SRV_Channels::get_output_scaled(SRV_Channel::k_throttle);
+    if (!is_flying() && arming.is_armed()) {
+        bool throw_detected = sq(ahrs.get_accel_ef().x) + sq(ahrs.get_accel_ef().y) > sq(g.takeoff_throttle_min_accel);
+        bool throttle_up_detected = throttle > aparm.throttle_cruise;
+        if (throw_detected || throttle_up_detected) {
+            plane.ahrs.setTakeoffExpected(true);
+        }
     }
 }
 
