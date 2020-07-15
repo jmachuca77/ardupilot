@@ -117,7 +117,7 @@ void ModeGuided::update()
             if (_have_strthr) {
                 // pass latest steering and throttle directly to motors library
                 g2.motors.set_steering(_strthr_steering * 4500.0f, false);
-                g2.motors.set_throttle(_strthr_throttle * 100.0f);
+                g2.motors.set_throttle(_strthr_throttle * 100.0f, false);
             } else {
                 // loiter or stop vehicle
                 if (rover.is_boat()) {
