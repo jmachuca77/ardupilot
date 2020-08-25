@@ -479,7 +479,7 @@ void AC_Avoid::adjust_velocity_circle_fence(float kP, float accel_cmss, Vector2f
     
     // back away if vehicle has breached margin
     if (is_negative(distance_to_boundary - margin_cm)) {     
-        calc_backup_velocity(kP, accel_cmss, quad_1_back_vel, quad_2_back_vel, quad_3_back_vel, quad_4_back_vel, margin_cm - distance_to_boundary, position_xy, dt);
+        calc_backup_velocity(kP, accel_cmss, quad_1_back_vel, quad_2_back_vel, quad_3_back_vel, quad_4_back_vel, margin_cm - distance_to_boundary, position_xy_cm, dt);
     }
     // desired backup velocity is sum of maximum velocity component in each quadrant 
     backup_vel = quad_1_back_vel + quad_2_back_vel + quad_3_back_vel + quad_4_back_vel;
@@ -788,7 +788,7 @@ void AC_Avoid::adjust_velocity_exclusion_circles(float kP, float accel_cmss, Vec
                 continue;
             }
         
-            const Vector2f vector_to_center = center_pos_cm - position_NE;
+            const Vector2f vector_to_center = center_pos_cm - position_NE_cm;
             const float dist_to_boundary = vector_to_center.length() - radius_cm;
             // back away if vehicle has breached margin
             if (is_negative(dist_to_boundary - margin_cm)) {
@@ -949,7 +949,7 @@ void AC_Avoid::adjust_velocity_polygon(float kP, float accel_cmss, Vector2f &des
     const float speed = safe_vel.length();
     Vector2f stopping_point_plus_margin; 
     if (!desired_vel_cms.is_zero()) {
-        stopping_point_plus_margin = position_xy + safe_vel*((2.0f + margin_cm + get_stopping_distance(kP, accel_cmss, speed))/speed);
+        stopping_point_plus_margin = position_xy_cm + safe_vel*((2.0f + margin_cm + get_stopping_distance(kP, accel_cmss, speed))/speed);
     }
 
     // for backing away
@@ -963,7 +963,7 @@ void AC_Avoid::adjust_velocity_polygon(float kP, float accel_cmss, Vector2f &des
         // end points of current edge
         Vector2f start = boundary[j];
         Vector2f end = boundary[i];
-        Vector2f vector_to_boundary = Vector2f::closest_point(position_xy, start, end) - position_xy;
+        Vector2f vector_to_boundary = Vector2f::closest_point(position_xy_cm, start, end) - position_xy_cm;
         // back away if vehicle has breached margin
         if (is_negative(vector_to_boundary.length() - margin_cm)) {
             calc_backup_velocity(kP, accel_cmss, quad_1_back_vel, quad_2_back_vel, quad_3_back_vel, quad_4_back_vel, margin_cm-vector_to_boundary.length(), vector_to_boundary, dt);

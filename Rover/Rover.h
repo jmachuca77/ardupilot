@@ -32,7 +32,6 @@
 #include <AP_BattMonitor/AP_BattMonitor.h>          // Battery monitor library
 #include <AP_Beacon/AP_Beacon.h>
 #include <AP_BoardConfig/AP_BoardConfig.h>
-#include <AP_BoardConfig/AP_BoardConfig_CAN.h>
 #include <AP_Button/AP_Button.h>
 #include <AP_ICEngine/AP_ICEngine.h>                // Internal Combustion Engine Library
 #include <AP_Camera/AP_Camera.h>                    // Camera triggering

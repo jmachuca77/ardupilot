@@ -27,6 +27,7 @@
 #include <AP_InternalError/AP_InternalError.h>
 #include <AP_Notify/AP_Notify.h>
 #include <AP_Vehicle/AP_Vehicle_Type.h>
+#include <GCS_MAVLink/GCS.h>
 
 #if AP_AHRS_NAVEKF_AVAILABLE
 
