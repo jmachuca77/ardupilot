@@ -237,7 +237,7 @@ public:
     void send_rc_channels_raw() const;
     void send_raw_imu();
 
-    void send_scaled_pressure_instance(uint8_t instance, void (*send_fn)(mavlink_channel_t chan, uint32_t time_boot_ms, float press_abs, float press_diff, int16_t temperature));
+    void send_scaled_pressure_instance(uint8_t instance, void (*send_fn)(mavlink_channel_t chan, uint32_t time_boot_ms, float press_abs, float press_diff, int16_t temperature, int16_t temperature_press_diff));
     void send_scaled_pressure();
     void send_scaled_pressure2();
     virtual void send_scaled_pressure3(); // allow sub to override this
@@ -266,6 +266,7 @@ public:
     void send_set_position_target_global_int(uint8_t target_system, uint8_t target_component, const Location& loc);
     void send_rpm() const;
     void send_generator_status() const;
+    virtual void send_winch_status() const {};
 
     // lock a channel, preventing use by MAVLink
     void lock(bool _lock) {

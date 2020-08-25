@@ -22,8 +22,8 @@ void Copter::init_ardupilot()
 #endif
 
     BoardConfig.init();
-#if HAL_WITH_UAVCAN
-    BoardConfig_CAN.init();
+#if HAL_MAX_CAN_PROTOCOL_DRIVERS
+    can_mgr.init();
 #endif
 
     // init cargo gripper
@@ -35,8 +35,10 @@ void Copter::init_ardupilot()
     fence.init();
 #endif
 
-    // init winch and wheel encoder
-    winch_init();
+    // init winch
+#if WINCH_ENABLED == ENABLED
+    g2.winch.init();
+#endif
 
     // initialise notify system
     notify.init();
@@ -130,7 +132,7 @@ void Copter::init_ardupilot()
     // init the optical flow sensor
     init_optflow();
 
-#if MOUNT == ENABLED
+#if HAL_MOUNT_ENABLED
     // initialise camera mount
     camera_mount.init();
 #endif
@@ -381,6 +383,21 @@ bool Copter::optflow_position_ok() const
     } else {
         return (filt_status.flags.horiz_pos_rel && !filt_status.flags.const_pos_mode);
     }
+}
+
+// returns true if the ekf has a good altitude estimate (required for modes which do AltHold)
+bool Copter::ekf_alt_ok() const
+{
+    if (!ahrs.have_inertial_nav()) {
+        // do not allow alt control with only dcm
+        return false;
+    }
+
+    // with EKF use filter status and ekf check
+    nav_filter_status filt_status = inertial_nav.get_filter_status();
+
+    // require both vertical velocity and position
+    return (filt_status.flags.vert_vel && filt_status.flags.vert_pos);
 }
 
 // update_auto_armed - update status of auto_armed flag

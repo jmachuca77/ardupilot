@@ -1,11 +1,10 @@
 #include <AP_HAL/AP_HAL.h>
 
 #include "AP_NavEKF3_core.h"
-#include <AP_Vehicle/AP_Vehicle.h>
 #include <GCS_MAVLink/GCS.h>
 #include <AP_Logger/AP_Logger.h>
-#include <AP_GPS/AP_GPS.h>
-#include <AP_VisualOdom/AP_VisualOdom.h>
+#include <AP_Vehicle/AP_Vehicle_Type.h>
+
 #include <new>
 
 /*
@@ -1218,7 +1217,7 @@ void NavEKF3::getRotationBodyToNED(Matrix3f &mat) const
     }
 }
 
-// return the quaternions defining the rotation from NED to XYZ (body) axes
+// return the quaternions defining the rotation from XYZ (body) to NED axes
 void NavEKF3::getQuaternionBodyToNED(int8_t instance, Quaternion &quat) const
 {
     if (instance < 0 || instance >= num_cores) instance = primary;

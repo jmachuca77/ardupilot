@@ -82,7 +82,12 @@ Aircraft::Aircraft(const char *frame_str) :
         sitl->ahrs_rotation_inv = sitl->ahrs_rotation.transposed();
     }
 
-    terrain = reinterpret_cast<AP_Terrain *>(AP_Param::find_object("TERRAIN_"));
+    terrain = &AP::terrain();
+
+    // init rangefinder array to -1 to signify no data
+    for (uint8_t i = 0; i < RANGEFINDER_MAX_INSTANCES; i++){
+        rangefinder_m[i] = -1.0f;
+    }
 }
 
 void Aircraft::set_start_location(const Location &start_loc, const float start_yaw)
@@ -374,6 +379,9 @@ void Aircraft::fill_fdm(struct sitl_fdm &fdm)
     fdm.scanner.points = scanner.points;
     fdm.scanner.ranges = scanner.ranges;
 
+    // copy rangefinder
+    memcpy(fdm.rangefinder_m, rangefinder_m, sizeof(fdm.rangefinder_m));
+
     if (is_smoothed) {
         fdm.xAccel = smoothing.accel_body.x;
         fdm.yAccel = smoothing.accel_body.y;
@@ -430,6 +438,44 @@ void Aircraft::fill_fdm(struct sitl_fdm &fdm)
         last_speedup = sitl->speedup;
     }
 }
+
+float Aircraft::rangefinder_range() const
+{
+    // swiped from sitl_rangefinder.cpp - we should unify them at some stage
+
+    float altitude = range;  // only sub appears to set this
+    if (is_equal(altitude, -1.0f)) {  // Use SITL altitude as reading by default
+        altitude = sitl->height_agl;
+    }
+
+    // sensor position offset in body frame
+    const Vector3f relPosSensorBF = sitl->rngfnd_pos_offset;
+
+    // adjust altitude for position of the sensor on the vehicle if position offset is non-zero
+    if (!relPosSensorBF.is_zero()) {
+        // get a rotation matrix following DCM conventions (body to earth)
+        Matrix3f rotmat;
+        sitl->state.quaternion.rotation_matrix(rotmat);
+        // rotate the offset into earth frame
+        const Vector3f relPosSensorEF = rotmat * relPosSensorBF;
+        // correct the altitude at the sensor
+        altitude -= relPosSensorEF.z;
+    }
+
+    // If the attidude is non reversed for SITL OR we are using rangefinder from external simulator,
+    // We adjust the reading with noise, glitch and scaler as the reading is on analog port.
+    if ((fabs(sitl->state.rollDeg) < 90.0 && fabs(sitl->state.pitchDeg) < 90.0) || !is_equal(range, -1.0f)) {
+        if (is_equal(range, -1.0f)) {  // disable for external reading that already handle this
+            // adjust for apparent altitude with roll
+            altitude /= cosf(radians(sitl->state.rollDeg)) * cosf(radians(sitl->state.pitchDeg));
+        }
+        // Add some noise on reading
+        altitude += sitl->sonar_noise * rand_float();
+    }
+
+    return altitude;
+}
+
 
 uint64_t Aircraft::get_wall_time_us() const
 {
@@ -809,6 +855,11 @@ void Aircraft::update_external_payload(const struct sitl_input &input)
     if (sprayer && sprayer->is_enabled()) {
         sprayer->update(input);
         external_payload_mass += sprayer->payload_mass();
+    }
+
+    // update i2c
+    if (i2c) {
+        i2c->update(*this);
     }
 
     // update buzzer

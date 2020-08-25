@@ -77,9 +77,6 @@ void SITL_State::_sitl_setup(const char *home_str)
     _barometer = AP_Baro::get_singleton();
     _ins = AP_InertialSensor::get_singleton();
     _compass = Compass::get_singleton();
-#if AP_TERRAIN_AVAILABLE
-    _terrain = reinterpret_cast<AP_Terrain *>(AP_Param::find_object("TERRAIN_"));
-#endif
 
     if (_sitl != nullptr) {
         // setup some initial values
@@ -99,6 +96,7 @@ void SITL_State::_sitl_setup(const char *home_str)
         sitl_model->set_parachute(&_sitl->parachute_sim);
         sitl_model->set_precland(&_sitl->precland_sim);
         sitl_model->set_icengine(&_sitl->icengine_sim);
+        sitl_model->set_i2c(&_sitl->i2c_sim);
 
         if (_use_fg_view) {
             fg_socket.connect(_fg_address, _fg_view_port);
@@ -605,49 +603,49 @@ void SITL_State::_fdm_input_local(void)
                       attitude);
     }
     if (benewake_tf02 != nullptr) {
-        benewake_tf02->update(sitl_model->get_range());
+        benewake_tf02->update(sitl_model->rangefinder_range());
     }
     if (benewake_tf03 != nullptr) {
-        benewake_tf03->update(sitl_model->get_range());
+        benewake_tf03->update(sitl_model->rangefinder_range());
     }
     if (benewake_tfmini != nullptr) {
-        benewake_tfmini->update(sitl_model->get_range());
+        benewake_tfmini->update(sitl_model->rangefinder_range());
     }
     if (lightwareserial != nullptr) {
-        lightwareserial->update(sitl_model->get_range());
+        lightwareserial->update(sitl_model->rangefinder_range());
     }
     if (lightwareserial_binary != nullptr) {
-        lightwareserial_binary->update(sitl_model->get_range());
+        lightwareserial_binary->update(sitl_model->rangefinder_range());
     }
     if (lanbao != nullptr) {
-        lanbao->update(sitl_model->get_range());
+        lanbao->update(sitl_model->rangefinder_range());
     }
     if (blping != nullptr) {
-        blping->update(sitl_model->get_range());
+        blping->update(sitl_model->rangefinder_range());
     }
     if (leddarone != nullptr) {
-        leddarone->update(sitl_model->get_range());
+        leddarone->update(sitl_model->rangefinder_range());
     }
     if (ulanding_v0 != nullptr) {
-        ulanding_v0->update(sitl_model->get_range());
+        ulanding_v0->update(sitl_model->rangefinder_range());
     }
     if (ulanding_v1 != nullptr) {
-        ulanding_v1->update(sitl_model->get_range());
+        ulanding_v1->update(sitl_model->rangefinder_range());
     }
     if (maxsonarseriallv != nullptr) {
-        maxsonarseriallv->update(sitl_model->get_range());
+        maxsonarseriallv->update(sitl_model->rangefinder_range());
     }
     if (wasp != nullptr) {
-        wasp->update(sitl_model->get_range());
+        wasp->update(sitl_model->rangefinder_range());
     }
     if (nmea != nullptr) {
-        nmea->update(sitl_model->get_range());
+        nmea->update(sitl_model->rangefinder_range());
     }
     if (rf_mavlink != nullptr) {
-        rf_mavlink->update(sitl_model->get_range());
+        rf_mavlink->update(sitl_model->rangefinder_range());
     }
     if (gyus42v2 != nullptr) {
-        gyus42v2->update(sitl_model->get_range());
+        gyus42v2->update(sitl_model->rangefinder_range());
     }
 
     if (frsky_d != nullptr) {
@@ -892,8 +890,7 @@ void SITL_State::set_height_agl(void)
     }
 
 #if AP_TERRAIN_AVAILABLE
-    if (_terrain != nullptr &&
-        _sitl != nullptr &&
+    if (_sitl != nullptr &&
         _sitl->terrain_enable) {
         // get height above terrain from AP_Terrain. This assumes
         // AP_Terrain is working
@@ -902,7 +899,9 @@ void SITL_State::set_height_agl(void)
         location.lat = _sitl->state.latitude*1.0e7;
         location.lng = _sitl->state.longitude*1.0e7;
 
-        if (_terrain->height_amsl(location, terrain_height_amsl, false)) {
+        AP_Terrain *_terrain = AP_Terrain::get_singleton();
+        if (_terrain != nullptr &&
+            _terrain->height_amsl(location, terrain_height_amsl, false)) {
             _sitl->height_agl = _sitl->state.altitude - terrain_height_amsl;
             return;
         }

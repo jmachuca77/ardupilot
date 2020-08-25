@@ -104,6 +104,12 @@ const AP_Param::GroupInfo AP_MotorsUGV::var_info[] = {
     // @Increment: 1
     // @User: Standard
     AP_GROUPINFO("THR_MAX_MAN", 30, AP_MotorsUGV, _throttle_max_manual_mode, 0),
+    // @Param: STR_THR_MIX
+    // @DisplayName: Motor steering vs throttle prioritisation
+    // @Description: Steering vs Throttle priorisation.  Higher numbers prioritise steering, lower numbers prioritise throttle.  Only valid for Skid Steering vehicles
+    // @Range: 0.2 1.0
+    // @User: Advanced
+    AP_GROUPINFO("STR_THR_MIX", 12, AP_MotorsUGV, _steering_throttle_mix, 0.5f),
 
     AP_GROUPEND
 };
@@ -700,8 +706,17 @@ void AP_MotorsUGV::output_skid_steering(bool armed, float steering, float thrott
     // check for saturation and scale back throttle and steering proportionally
     const float saturation_value = fabsf(steering_scaled) + fabsf(throttle_scaled);
     if (saturation_value > 1.0f) {
-        steering_scaled = steering_scaled / saturation_value;
-        throttle_scaled = throttle_scaled / saturation_value;
+        const float str_thr_mix = constrain_float(_steering_throttle_mix, 0.0f, 1.0f);
+        const float fair_scaler = 1.0f / saturation_value;
+        if (str_thr_mix >= 0.5f) {
+            // prioritise steering over throttle
+            steering_scaled *= linear_interpolate(fair_scaler, 1.0f, str_thr_mix, 0.5f, 1.0f);
+            throttle_scaled = (1.0f - fabsf(steering_scaled)) * (is_negative(throttle_scaled) ? -1.0f : 1.0f);
+        } else {
+            // prioritise throttle over steering
+            throttle_scaled *= linear_interpolate(fair_scaler, 1.0f, 0.5f - str_thr_mix, 0.0f, 0.5f);
+            steering_scaled = (1.0f - fabsf(throttle_scaled)) * (is_negative(steering_scaled) ? -1.0f : 1.0f);
+        }
     }
 
     // add in throttle and steering

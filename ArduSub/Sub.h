@@ -359,7 +359,7 @@ private:
 #endif
 
     // Camera/Antenna mount tracking and stabilisation stuff
-#if MOUNT == ENABLED
+#if HAL_MOUNT_ENABLED
     AP_Mount camera_mount;
 #endif
 
@@ -509,6 +509,7 @@ private:
 
     bool stabilize_init(void);
     void stabilize_run();
+    void control_depth();
     bool manual_init(void);
     void manual_run();
     void failsafe_sensors_check(void);

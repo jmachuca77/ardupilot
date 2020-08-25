@@ -13,6 +13,7 @@
 #include "SIM_Gripper_EPM.h"
 #include "SIM_Gripper_Servo.h"
 #include "SIM_ICEngine.h"
+#include "SIM_I2C.h"
 #include "SIM_Parachute.h"
 #include "SIM_Precland.h"
 #include "SIM_Sprayer.h"
@@ -20,6 +21,7 @@
 #include "SIM_EFI_MegaSquirt.h"
 #include "SIM_RichenPower.h"
 #include "SIM_Ship.h"
+#include <AP_RangeFinder/AP_RangeFinder.h>
 
 namespace SITL {
 
@@ -57,7 +59,7 @@ struct sitl_fdm {
     uint8_t num_motors;
     float rpm[12];         // RPM of all motors
     uint8_t rcin_chan_count;
-    float  rcin[8];         // RC input 0..1
+    float  rcin[12];         // RC input 0..1
     double range;           // rangefinder value
     Vector3f bodyMagField;  // Truth XYZ magnetic field vector in body-frame. Includes motor interference. Units are milli-Gauss.
     Vector3f angAccel; // Angular acceleration in degrees/s/s about the XYZ body axes
@@ -67,6 +69,8 @@ struct sitl_fdm {
         struct vector3f_array points;
         struct float_array ranges;
     } scanner;
+
+    float rangefinder_m[RANGEFINDER_MAX_INSTANCES];
 };
 
 // number of rc output channels
@@ -186,6 +190,7 @@ public:
     AP_Int8 gps_hdg_enabled[2]; // enable the output of a NMEA heading HDT sentence or UBLOX RELPOSNED
     AP_Float gps_drift_alt[2];
     AP_Vector3f gps_pos_offset[2];  // XYZ position of the GPS antenna phase centre relative to the body frame origin (m)
+    AP_Float gps_accuracy[2];
 
     AP_Float batt_voltage; // battery voltage base
     AP_Float accel_fail;  // accelerometer failure value
@@ -351,6 +356,10 @@ public:
     // convert a set of roll rates from body frame to earth frame
     static Vector3f convert_earth_frame(const Matrix3f &dcm, const Vector3f &gyro);
 
+    int i2c_ioctl(uint8_t i2c_operation, void *data) {
+        return i2c_sim.ioctl(i2c_operation, data);
+    }
+
     Sprayer sprayer_sim;
 
     // simulated ship takeoffs
@@ -362,6 +371,7 @@ public:
 
     Parachute parachute_sim;
     Buzzer buzzer_sim;
+    I2C i2c_sim;
     ToneAlarm tonealarm_sim;
     SIM_Precland precland_sim;
     RichenPower richenpower_sim;
@@ -386,6 +396,10 @@ public:
     AP_Int16 vicon_yaw_error;   // vicon yaw error in degrees (added to reported yaw sent to vehicle)
     AP_Int8 vicon_type_mask;    // vicon message type mask (bit0:vision position estimate, bit1:vision speed estimate, bit2:vicon position estimate)
     AP_Vector3f vicon_vel_glitch;   // velocity glitch in m/s in vicon's local frame
+
+    // get the rangefinder reading for the desired instance, returns -1 for no data
+    float get_rangefinder(uint8_t instance);
+
 };
 
 } // namespace SITL

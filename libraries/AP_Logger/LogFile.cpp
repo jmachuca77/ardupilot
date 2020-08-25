@@ -185,7 +185,7 @@ void AP_Logger::Write_GPS(uint8_t i, uint64_t time_us)
 // Write an RCIN packet
 void AP_Logger::Write_RCIN(void)
 {
-    uint16_t values[14] = {};
+    uint16_t values[16] = {};
     rc().get_radio_in(values, ARRAY_SIZE(values));
     const struct log_RCIN pkt{
         LOG_PACKET_HEADER_INIT(LOG_RCIN_MSG),
@@ -206,6 +206,23 @@ void AP_Logger::Write_RCIN(void)
         chan14        : values[13]
     };
     WriteBlock(&pkt, sizeof(pkt));
+
+    // don't waste logging bandwidth if we haven't seen non-zero
+    // channels 15/16:
+    if (!seen_nonzero_rcin15_or_rcin16) {
+        if (!values[14] && !values[15]) {
+            return;
+        }
+        seen_nonzero_rcin15_or_rcin16 = true;
+    }
+
+    const struct log_RCIN2 pkt2{
+        LOG_PACKET_HEADER_INIT(LOG_RCIN2_MSG),
+        time_us       : AP_HAL::micros64(),
+        chan15         : values[14],
+        chan16         : values[15]
+    };
+    WriteBlock(&pkt2, sizeof(pkt2));
 }
 
 // Write an SERVO packet
@@ -480,6 +497,7 @@ void AP_Logger::Write_Power(void)
         Vcc     : hal.analogin->board_voltage(),
         Vservo  : hal.analogin->servorail_voltage(),
         flags   : hal.analogin->power_status_flags(),
+        accumulated_flags   : hal.analogin->accumulated_power_status_flags(),
         safety_and_arm : safety_and_armed
     };
     WriteBlock(&pkt, sizeof(pkt));
@@ -1043,20 +1061,24 @@ void AP_Logger::Write_SRTL(bool active, uint16_t num_points, uint16_t max_points
     WriteBlock(&pkt_srtl, sizeof(pkt_srtl));
 }
 
-void AP_Logger::Write_OABendyRuler(bool active, float target_yaw, bool resist_chg, float margin, const Location &final_dest, const Location &oa_dest)
+void AP_Logger::Write_OABendyRuler(uint8_t type, bool active, float target_yaw, float target_pitch, bool resist_chg, float margin, const Location &final_dest, const Location &oa_dest)
 {
     const struct log_OABendyRuler pkt{
         LOG_PACKET_HEADER_INIT(LOG_OA_BENDYRULER_MSG),
         time_us     : AP_HAL::micros64(),
+        type        : type,
         active      : active,
         target_yaw  : (uint16_t)wrap_360(target_yaw),
         yaw         : (uint16_t)wrap_360(AP::ahrs().yaw_sensor * 0.01f),
+        target_pitch: (uint16_t)target_pitch,
         resist_chg  : resist_chg,
         margin      : margin,
         final_lat   : final_dest.lat,
         final_lng   : final_dest.lng,
+        final_alt   : final_dest.alt,
         oa_lat      : oa_dest.lat,
-        oa_lng      : oa_dest.lng
+        oa_lng      : oa_dest.lng,
+        oa_alt      : oa_dest.alt
     };
     WriteBlock(&pkt, sizeof(pkt));
 }
@@ -1074,6 +1096,41 @@ void AP_Logger::Write_OADijkstra(uint8_t state, uint8_t error_id, uint8_t curr_p
         final_lng   : final_dest.lng,
         oa_lat      : oa_dest.lat,
         oa_lng      : oa_dest.lng
+    };
+    WriteBlock(&pkt, sizeof(pkt));
+}
+
+void AP_Logger::Write_SimpleAvoidance(uint8_t state, const Vector2f& desired_vel, const Vector2f& modified_vel, bool back_up)
+{
+    struct log_SimpleAvoid pkt{
+        LOG_PACKET_HEADER_INIT(LOG_SIMPLE_AVOID_MSG),
+        time_us         : AP_HAL::micros64(),
+        state           : state,
+        desired_vel_x   : desired_vel.x * 0.01f,
+        desired_vel_y   : desired_vel.y * 0.01f,
+        modified_vel_x  : modified_vel.x * 0.01f,
+        modified_vel_y  : modified_vel.y * 0.01f,
+        backing_up      : back_up,
+    };
+    WriteBlock(&pkt, sizeof(pkt));
+}
+
+void AP_Logger::Write_Winch(bool healthy, bool thread_end, bool moving, bool clutch, uint8_t mode, float desired_length, float length, float desired_rate, uint16_t tension, float voltage, int8_t temp)
+{
+    struct log_Winch pkt{
+        LOG_PACKET_HEADER_INIT(LOG_WINCH_MSG),
+        time_us         : AP_HAL::micros64(),
+        healthy         : healthy,
+        thread_end      : thread_end,
+        moving          : moving,
+        clutch          : clutch,
+        mode            : mode,
+        desired_length  : desired_length,
+        length          : length,
+        desired_rate    : desired_rate,
+        tension         : tension,
+        voltage         : voltage,
+        temp            : temp
     };
     WriteBlock(&pkt, sizeof(pkt));
 }

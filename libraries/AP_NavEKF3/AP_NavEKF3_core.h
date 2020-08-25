@@ -28,11 +28,12 @@
 
 #include <AP_Common/Location.h>
 #include <AP_Math/AP_Math.h>
-#include "AP_NavEKF3.h"
 #include <AP_Math/vectorN.h>
 #include <AP_NavEKF/AP_NavEKF_core_common.h>
 #include <AP_NavEKF3/AP_NavEKF3_Buffer.h>
 #include <AP_InertialSensor/AP_InertialSensor.h>
+#include <GCS_MAVLink/GCS_MAVLink.h>
+
 #include "AP_NavEKF/EKFGSF_yaw.h"
 
 // GPS pre-flight check bit locations
@@ -91,7 +92,7 @@ class NavEKF3_core : public NavEKF_core_common
 {
 public:
     // Constructor
-    NavEKF3_core(NavEKF3 *_frontend);
+    NavEKF3_core(class NavEKF3 *_frontend);
 
     // setup this core backend
     bool setup_core(uint8_t _imu_index, uint8_t _core_index);
@@ -445,7 +446,7 @@ private:
     EKFGSF_yaw *yawEstimator;
 
     // Reference to the global EKF frontend for parameters
-    NavEKF3 *frontend;
+    class NavEKF3 *frontend;
     uint8_t imu_index; // preferred IMU index
     uint8_t gyro_index_active; // active gyro index (in case preferred fails)
     uint8_t accel_index_active; // active accel index (in case preferred fails)
@@ -628,6 +629,19 @@ private:
         Vector3f accel_bias;
     } inactiveBias[INS_MAX_INSTANCES];
 
+    // Specify source of data to be used for a partial state reset
+    // Checking the availability and quality of the data source specified is the responsibility of the caller
+    enum class resetDataSource {
+        DEFAULT=0,      // Use data source selected by reset function internal rules
+        GPS=1,          // Use GPS
+        RNGBCN=2,       // Use beacon range data
+        FLOW=3,         // Use optical flow rates
+        BARO=4,         // Use Baro height
+        MAG=5,          // Use magnetometer data
+        RNGFND=6,       // Use rangefinder data
+        EXTNAV=7        // Use external nav data
+    };
+
     // update the navigation filter status
     void updateFilterStatus(void);
 
@@ -784,8 +798,8 @@ private:
     // align the yaw angle for the quaternion states using the external yaw sensor
     void alignYawAngle();
 
-    // update quaternion, mag field states and associated variances using magnetomer and declination data
-    void calcQuatAndFieldStates();
+    // update mag field states and associated variances using magnetomer and declination data
+    void resetMagFieldStates();
 
     // reset yaw based on magnetic field sample
     void setYawFromMag();
@@ -797,7 +811,7 @@ private:
     void InitialiseVariablesMag();
 
     // reset the horizontal position states uing the last GPS measurement
-    void ResetPosition(void);
+    void ResetPosition(resetDataSource posResetSource);
 
     // reset the stateStruct's NE position to the specified position
     void ResetPositionNE(float posN, float posE);
@@ -806,7 +820,7 @@ private:
     void ResetPositionD(float posD);
 
     // reset velocity states using the last GPS measurement
-    void ResetVelocity(void);
+    void ResetVelocity(resetDataSource velResetSource);
 
     // reset the vertical position state using the last height measurement
     void ResetHeight(void);
@@ -1148,21 +1162,6 @@ private:
     uint32_t firstInitTime_ms;      // First time the initialise function was called (msec)
     uint32_t lastInitFailReport_ms; // Last time the buffer initialisation failure report was sent (msec)
 
-    // Specify source of data to be used for a partial state reset
-    // Checking the availability and quality of the data source specified is the responsibility of the caller
-    enum resetDataSource {
-                    DEFAULT=0,      // Use data source selected by reset function internal rules
-                    GPS=1,          // Use GPS
-                    RNGBCN=2,       // Use beacon range data
-                    FLOW=3,         // Use optical flow rates
-                    BARO=4,         // Use Baro height
-                    MAG=5,          // Use magnetometer data
-                    RNGFND=6,       // Use rangefinder data
-                    EXTNAV=7        // Use external nav data
-                        };
-    resetDataSource posResetSource; // preferred source of data for position reset
-    resetDataSource velResetSource; // preferred source of data for a velocity reset
-
     // variables used to calculate a vertical velocity that is kinematically consistent with the vertical position
     struct {
         float pos;
@@ -1196,7 +1195,6 @@ private:
     of_elements ofDataNew;          // OF data at the current time horizon
     of_elements ofDataDelayed;      // OF data at the fusion time horizon
     uint8_t ofStoreIndex;           // OF data storage index
-    bool flowDataToFuse;            // true when optical flow data has is ready for fusion
     bool flowDataValid;             // true while optical flow data is still fresh
     Vector2f auxFlowObsInnov;       // optical flow rate innovation from 1-state terrain offset estimator
     uint32_t flowValidMeaTime_ms;   // time stamp from latest valid flow measurement (msec)
@@ -1262,10 +1260,7 @@ private:
     bool bodyVelFusionActive;           // true when body frame velocity fusion is active
 
     // wheel sensor fusion
-    uint32_t wheelOdmMeasTime_ms;       // time wheel odometry measurements were accepted for input to the data buffer (msec)
-    bool usingWheelSensors;             // true when the body frame velocity fusion method should take onbservation data from the wheel odometry buffer
     obs_ring_buffer_t<wheel_odm_elements> storedWheelOdm;    // body velocity data buffer
-    wheel_odm_elements wheelOdmDataNew;       // Body frame odometry data at the current time horizon
     wheel_odm_elements wheelOdmDataDelayed;   // Body  frame odometry data at the fusion time horizon
 
     // yaw sensor fusion
@@ -1276,7 +1271,6 @@ private:
 
     // Range Beacon Sensor Fusion
     obs_ring_buffer_t<rng_bcn_elements> storedRangeBeacon; // Beacon range buffer
-    rng_bcn_elements rngBcnDataNew;     // Range beacon data at the current time horizon
     rng_bcn_elements rngBcnDataDelayed; // Range beacon data at the fusion time horizon
     uint8_t rngBcnStoreIndex;           // Range beacon data storage index
     uint32_t lastRngBcnPassTime_ms;     // time stamp when the range beacon measurement last passed innovation consistency checks (msec)
@@ -1285,7 +1279,7 @@ private:
     bool rngBcnTimeout;                 // boolean true if range beacon measurements have failed innovation consistency checks for too long
     float varInnovRngBcn;               // range beacon observation innovation variance (m^2)
     float innovRngBcn;                  // range beacon observation innovation (m)
-    uint32_t lastTimeRngBcn_ms[10];     // last time we received a range beacon measurement (msec)
+    uint32_t lastTimeRngBcn_ms[4];      // last time we received a range beacon measurement (msec)
     bool rngBcnDataToFuse;              // true when there is new range beacon data to fuse
     Vector3f beaconVehiclePosNED;       // NED position estimate from the beacon system (NED)
     float beaconVehiclePosErr;          // estimated position error from the beacon system (m)
@@ -1324,7 +1318,7 @@ private:
         float innovVar;     // innovation variance (m^2)
         float testRatio;    // innovation consistency test ratio
         Vector3f beaconPosNED; // beacon NED position
-    } rngBcnFusionReport[10];
+    } rngBcnFusionReport[4];
 
     // height source selection logic
     uint8_t activeHgtSource;    // integer defining active height source
@@ -1371,7 +1365,6 @@ private:
     bool extNavDataToFuse;              // true when there is new external nav data to fuse
     bool extNavUsedForPos;              // true when the external nav data is being used as a position reference.
     obs_ring_buffer_t<ext_nav_vel_elements> storedExtNavVel;    // external navigation velocity data buffer
-    ext_nav_vel_elements extNavVelNew;  // external navigation velocity data at the current time horizon
     ext_nav_vel_elements extNavVelDelayed;  // external navigation velocity data at the fusion time horizon.  Already corrected for sensor position
     uint32_t extNavVelMeasTime_ms;      // time external navigation velocity measurements were accepted for input to the data buffer (msec)
     bool extNavVelToFuse;               // true when there is new external navigation velocity to fuse

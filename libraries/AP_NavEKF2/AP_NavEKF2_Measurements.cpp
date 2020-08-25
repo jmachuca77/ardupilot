@@ -1,6 +1,5 @@
 #include <AP_HAL/AP_HAL.h>
 
-#include "AP_NavEKF2.h"
 #include "AP_NavEKF2_core.h"
 #include <AP_AHRS/AP_AHRS.h>
 #include <AP_Vehicle/AP_Vehicle.h>
@@ -10,8 +9,6 @@
 #include <AP_GPS/AP_GPS.h>
 #include <AP_Baro/AP_Baro.h>
 #include <AP_Compass/AP_Compass.h>
-
-#include <stdio.h>
 
 extern const AP_HAL::HAL& hal;
 
@@ -520,6 +517,7 @@ void NavEKF2_core::readGpsData()
             } else {
                 gpsSpdAccuracy = MAX(gpsSpdAccuracy,gpsSpdAccRaw);
                 gpsSpdAccuracy = MIN(gpsSpdAccuracy,50.0f);
+                gpsSpdAccuracy = MAX(gpsSpdAccuracy,frontend->_gpsHorizVelNoise);
             }
             gpsPosAccuracy *= (1.0f - alpha);
             float gpsPosAccRaw;
@@ -528,6 +526,7 @@ void NavEKF2_core::readGpsData()
             } else {
                 gpsPosAccuracy = MAX(gpsPosAccuracy,gpsPosAccRaw);
                 gpsPosAccuracy = MIN(gpsPosAccuracy,100.0f);
+                gpsPosAccuracy = MAX(gpsPosAccuracy, frontend->_gpsHorizPosNoise);
             }
             gpsHgtAccuracy *= (1.0f - alpha);
             float gpsHgtAccRaw;
@@ -536,6 +535,7 @@ void NavEKF2_core::readGpsData()
             } else {
                 gpsHgtAccuracy = MAX(gpsHgtAccuracy,gpsHgtAccRaw);
                 gpsHgtAccuracy = MIN(gpsHgtAccuracy,100.0f);
+                gpsHgtAccuracy = MAX(gpsHgtAccuracy, 1.5f * frontend->_gpsHorizPosNoise);
             }
 
             // check if we have enough GPS satellites and increase the gps noise scaler if we don't

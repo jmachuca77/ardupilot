@@ -1,15 +1,14 @@
 #include <AP_HAL/AP_HAL.h>
 
-#include "AP_NavEKF3.h"
 #include "AP_NavEKF3_core.h"
 #include <AP_AHRS/AP_AHRS.h>
-#include <AP_Vehicle/AP_Vehicle.h>
 #include <GCS_MAVLink/GCS.h>
 #include <AP_RangeFinder/AP_RangeFinder.h>
 #include <AP_RangeFinder/AP_RangeFinder_Backend.h>
 #include <AP_GPS/AP_GPS.h>
 #include <AP_Baro/AP_Baro.h>
 #include <AP_Compass/AP_Compass.h>
+#include <AP_Logger/AP_Logger.h>
 
 extern const AP_HAL::HAL& hal;
 
@@ -163,18 +162,17 @@ void NavEKF3_core::writeWheelOdom(float delAng, float delTime, uint32_t timeStam
         return;
     }
 
+    wheel_odm_elements wheelOdmDataNew = {};
     wheelOdmDataNew.hub_offset = &posOffset;
     wheelOdmDataNew.delAng = delAng;
     wheelOdmDataNew.radius = radius;
     wheelOdmDataNew.delTime = delTime;
-    wheelOdmMeasTime_ms = timeStamp_ms;
 
     // because we are currently converting to an equivalent velocity measurement before fusing
     // the measurement time is moved back to the middle of the sampling period
     wheelOdmDataNew.time_ms = timeStamp_ms - (uint32_t)(500.0f * delTime);
 
     storedWheelOdm.push(wheelOdmDataNew);
-
 }
 
 // write the raw optical flow measurements
@@ -565,6 +563,7 @@ void NavEKF3_core::readGpsData()
             } else {
                 gpsSpdAccuracy = MAX(gpsSpdAccuracy,gpsSpdAccRaw);
                 gpsSpdAccuracy = MIN(gpsSpdAccuracy,50.0f);
+                gpsSpdAccuracy = MAX(gpsSpdAccuracy,frontend->_gpsHorizVelNoise);
             }
             gpsPosAccuracy *= (1.0f - alpha);
             float gpsPosAccRaw;
@@ -573,6 +572,7 @@ void NavEKF3_core::readGpsData()
             } else {
                 gpsPosAccuracy = MAX(gpsPosAccuracy,gpsPosAccRaw);
                 gpsPosAccuracy = MIN(gpsPosAccuracy,100.0f);
+                gpsPosAccuracy = MAX(gpsPosAccuracy, frontend->_gpsHorizPosNoise);
             }
             gpsHgtAccuracy *= (1.0f - alpha);
             float gpsHgtAccRaw;
@@ -581,6 +581,7 @@ void NavEKF3_core::readGpsData()
             } else {
                 gpsHgtAccuracy = MAX(gpsHgtAccuracy,gpsHgtAccRaw);
                 gpsHgtAccuracy = MIN(gpsHgtAccuracy,100.0f);
+                gpsHgtAccuracy = MAX(gpsHgtAccuracy, 1.5f * frontend->_gpsHorizPosNoise);
             }
 
             // check if we have enough GPS satellites and increase the gps noise scaler if we don't
@@ -813,6 +814,10 @@ void NavEKF3_core::readAirSpdData()
 // check for new range beacon data and push to data buffer if available
 void NavEKF3_core::readRngBcnData()
 {
+    // check that arrays are large enough
+    static_assert(ARRAY_SIZE(lastTimeRngBcn_ms) >= AP_BEACON_MAX_BEACONS, "lastTimeRngBcn_ms should have at least AP_BEACON_MAX_BEACONS elements");
+    static_assert(ARRAY_SIZE(rngBcnFusionReport) >= AP_BEACON_MAX_BEACONS, "rngBcnFusionReport should have at least AP_BEACON_MAX_BEACONS elements");
+
     // get the location of the beacon data
     const AP_Beacon *beacon = AP::beacon();
 
@@ -822,14 +827,14 @@ void NavEKF3_core::readRngBcnData()
     }
 
     // get the number of beacons in use
-    N_beacons = beacon->count();
+    N_beacons = MIN(beacon->count(), ARRAY_SIZE(lastTimeRngBcn_ms));
 
     // search through all the beacons for new data and if we find it stop searching and push the data into the observation buffer
-    bool newDataToPush = false;
+    bool newDataPushed = false;
     uint8_t numRngBcnsChecked = 0;
     // start the search one index up from where we left it last time
     uint8_t index = lastRngBcnChecked;
-    while (!newDataToPush && numRngBcnsChecked < N_beacons) {
+    while (!newDataPushed && (numRngBcnsChecked < N_beacons)) {
         // track the number of beacons checked
         numRngBcnsChecked++;
 
@@ -840,9 +845,9 @@ void NavEKF3_core::readRngBcnData()
         }
 
         // check that the beacon is healthy and has new data
-        if (beacon->beacon_healthy(index) &&
-                beacon->beacon_last_update_ms(index) != lastTimeRngBcn_ms[index])
-        {
+        if (beacon->beacon_healthy(index) && beacon->beacon_last_update_ms(index) != lastTimeRngBcn_ms[index]) {
+            rng_bcn_elements rngBcnDataNew = {};
+
             // set the timestamp, correcting for measurement delay and average intersampling delay due to the filter update rate
             lastTimeRngBcn_ms[index] = beacon->beacon_last_update_ms(index);
             rngBcnDataNew.time_ms = lastTimeRngBcn_ms[index] - frontend->_rngBcnDelay_ms - localFilterTimeStep_ms/2;
@@ -861,10 +866,13 @@ void NavEKF3_core::readRngBcnData()
             rngBcnDataNew.beacon_ID = index;
 
             // indicate we have new data to push to the buffer
-            newDataToPush = true;
+            newDataPushed = true;
 
             // update the last checked index
             lastRngBcnChecked = index;
+
+            // Save data into the buffer to be fused when the fusion time horizon catches up with it
+            storedRangeBeacon.push(rngBcnDataNew);
         }
     }
 
@@ -874,14 +882,14 @@ void NavEKF3_core::readRngBcnData()
     }
 
     // Check if the range beacon data can be used to align the vehicle position
-    if (imuSampleTime_ms - rngBcnLast3DmeasTime_ms < 250 && beaconVehiclePosErr < 1.0f && rngBcnAlignmentCompleted) {
+    if ((imuSampleTime_ms - rngBcnLast3DmeasTime_ms < 250) && (beaconVehiclePosErr < 1.0f) && rngBcnAlignmentCompleted) {
         // check for consistency between the position reported by the beacon and the position from the 3-State alignment filter
         const float posDiffSq = sq(receiverPos.x - beaconVehiclePosNED.x) + sq(receiverPos.y - beaconVehiclePosNED.y);
         const float posDiffVar = sq(beaconVehiclePosErr) + receiverPosCov[0][0] + receiverPosCov[1][1];
         if (posDiffSq < 9.0f * posDiffVar) {
             rngBcnGoodToAlign = true;
             // Set the EKF origin and magnetic field declination if not previously set
-            if (!validOrigin && PV_AidingMode != AID_ABSOLUTE) {
+            if (!validOrigin && (PV_AidingMode != AID_ABSOLUTE)) {
                 // get origin from beacon system
                 Location origin_loc;
                 if (beacon->get_origin(origin_loc)) {
@@ -900,11 +908,6 @@ void NavEKF3_core::readRngBcnData()
         }
     } else {
         rngBcnGoodToAlign = false;
-    }
-
-    // Save data into the buffer to be fused when the fusion time horizon catches up with it
-    if (newDataToPush) {
-        storedRangeBeacon.push(rngBcnDataNew);
     }
 
     // Check the buffer for measurements that have been overtaken by the fusion time horizon and need to be fused
@@ -1013,13 +1016,15 @@ void NavEKF3_core::writeExtNavVelData(const Vector3f &vel, float err, uint32_t t
 
     extNavVelMeasTime_ms = timeStamp_ms - delay_ms;
     useExtNavVel = true;
-    extNavVelNew.vel = vel;
-    extNavVelNew.err = err;
     // Correct for the average intersampling delay due to the filter updaterate
     timeStamp_ms -= localFilterTimeStep_ms/2;
     // Prevent time delay exceeding age of oldest IMU data in the buffer
     timeStamp_ms = MAX(timeStamp_ms,imuDataDelayed.time_ms);
-    extNavVelNew.time_ms = timeStamp_ms;
+    const ext_nav_vel_elements extNavVelNew {
+        vel,
+        err,
+        timeStamp_ms
+    };
     storedExtNavVel.push(extNavVelNew);
 }
 

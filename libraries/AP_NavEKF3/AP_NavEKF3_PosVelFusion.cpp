@@ -2,8 +2,6 @@
 
 #include "AP_NavEKF3.h"
 #include "AP_NavEKF3_core.h"
-#include <AP_AHRS/AP_AHRS.h>
-#include <AP_Vehicle/AP_Vehicle.h>
 #include <GCS_MAVLink/GCS.h>
 #include <AP_RangeFinder/AP_RangeFinder.h>
 #include <AP_RangeFinder/AP_RangeFinder_Backend.h>
@@ -18,7 +16,7 @@ extern const AP_HAL::HAL& hal;
 
 // Reset velocity states to last GPS measurement if available or to zero if in constant position mode or if PV aiding is not absolute
 // Do not reset vertical velocity using GPS as there is baro alt available to constrain drift
-void NavEKF3_core::ResetVelocity(void)
+void NavEKF3_core::ResetVelocity(resetDataSource velResetSource)
 {
     // Store the velocity before the reset so that we can record the reset delta
     velResetNE.x = stateStruct.velocity.x;
@@ -34,7 +32,7 @@ void NavEKF3_core::ResetVelocity(void)
         P[5][5] = P[4][4] = sq(frontend->_gpsHorizVelNoise);
     } else {
         // reset horizontal velocity states to the GPS velocity if available
-        if ((imuSampleTime_ms - lastTimeGpsReceived_ms < 250 && velResetSource == DEFAULT) || velResetSource == GPS) {
+        if ((imuSampleTime_ms - lastTimeGpsReceived_ms < 250 && velResetSource == resetDataSource::DEFAULT) || velResetSource == resetDataSource::GPS) {
             // correct for antenna position
             gps_elements gps_corrected = gpsDataNew;
             CorrectGPSForAntennaOffset(gps_corrected);
@@ -45,11 +43,12 @@ void NavEKF3_core::ResetVelocity(void)
             // clear the timeout flags and counters
             velTimeout = false;
             lastVelPassTime_ms = imuSampleTime_ms;
-        } else if ((imuSampleTime_ms - extNavVelMeasTime_ms < 250 && posResetSource == DEFAULT) || velResetSource == EXTNAV) {
+        } else if ((imuSampleTime_ms - extNavVelMeasTime_ms < 250 && velResetSource == resetDataSource::DEFAULT) || velResetSource == resetDataSource::EXTNAV) {
             // use external nav data as the 2nd preference
             // already corrected for sensor position
-            stateStruct.velocity = extNavVelDelayed.vel;
-            P[5][5] = P[4][4] = P[3][3] = sq(extNavVelDelayed.err);
+            stateStruct.velocity.x = extNavVelDelayed.vel.x;
+            stateStruct.velocity.y = extNavVelDelayed.vel.y;
+            P[5][5] = P[4][4] = sq(extNavVelDelayed.err);
             velTimeout = false;
             lastVelPassTime_ms = imuSampleTime_ms;
         } else {
@@ -77,14 +76,10 @@ void NavEKF3_core::ResetVelocity(void)
 
     // store the time of the reset
     lastVelReset_ms = imuSampleTime_ms;
-
-    // clear reset data source preference
-    velResetSource = DEFAULT;
-
 }
 
 // resets position states to last GPS measurement or to zero if in constant position mode
-void NavEKF3_core::ResetPosition(void)
+void NavEKF3_core::ResetPosition(resetDataSource posResetSource)
 {
     // Store the position before the reset so that we can record the reset delta
     posResetNE.x = stateStruct.position.x;
@@ -102,7 +97,7 @@ void NavEKF3_core::ResetPosition(void)
         P[7][7] = P[8][8] = sq(frontend->_gpsHorizPosNoise);
     } else  {
         // Use GPS data as first preference if fresh data is available
-        if ((imuSampleTime_ms - lastTimeGpsReceived_ms < 250 && posResetSource == DEFAULT) || posResetSource == GPS) {
+        if ((imuSampleTime_ms - lastTimeGpsReceived_ms < 250 && posResetSource == resetDataSource::DEFAULT) || posResetSource == resetDataSource::GPS) {
             // correct for antenna position
             gps_elements gps_corrected = gpsDataNew;
             CorrectGPSForAntennaOffset(gps_corrected);
@@ -116,7 +111,7 @@ void NavEKF3_core::ResetPosition(void)
             // clear the timeout flags and counters
             posTimeout = false;
             lastPosPassTime_ms = imuSampleTime_ms;
-        } else if ((imuSampleTime_ms - rngBcnLast3DmeasTime_ms < 250 && posResetSource == DEFAULT) || posResetSource == RNGBCN) {
+        } else if ((imuSampleTime_ms - rngBcnLast3DmeasTime_ms < 250 && posResetSource == resetDataSource::DEFAULT) || posResetSource == resetDataSource::RNGBCN) {
             // use the range beacon data as a second preference
             stateStruct.position.x = receiverPos.x;
             stateStruct.position.y = receiverPos.y;
@@ -126,7 +121,7 @@ void NavEKF3_core::ResetPosition(void)
             // clear the timeout flags and counters
             rngBcnTimeout = false;
             lastRngBcnPassTime_ms = imuSampleTime_ms;
-        } else if ((imuSampleTime_ms - extNavDataDelayed.time_ms < 250 && posResetSource == DEFAULT) || posResetSource == EXTNAV) {
+        } else if ((imuSampleTime_ms - extNavDataDelayed.time_ms < 250 && posResetSource == resetDataSource::DEFAULT) || posResetSource == resetDataSource::EXTNAV) {
             // use external nav data as the third preference
             ext_nav_elements extNavCorrected = extNavDataDelayed;
             CorrectExtNavForSensorOffset(extNavCorrected.pos);
@@ -154,10 +149,6 @@ void NavEKF3_core::ResetPosition(void)
 
     // store the time of the reset
     lastPosReset_ms = imuSampleTime_ms;
-
-    // clear reset source preference
-    posResetSource = DEFAULT;
-
 }
 
 // reset the stateStruct's NE position to the specified position
@@ -264,7 +255,7 @@ void NavEKF3_core::ResetHeight(void)
     if (inFlight && !gpsNotAvailable && frontend->_fusionModeGPS == 0 && !frontend->inhibitGpsVertVelUse) {
         stateStruct.velocity.z =  gpsDataNew.vel.z;
     } else if (inFlight && useExtNavVel && (activeHgtSource == HGT_SOURCE_EXTNAV)) {
-        stateStruct.velocity.z = extNavVelNew.vel.z;
+        stateStruct.velocity.z = extNavVelDelayed.vel.z;
     } else if (onGround) {
         stateStruct.velocity.z = 0.0f;
     }
@@ -280,8 +271,11 @@ void NavEKF3_core::ResetHeight(void)
     zeroCols(P,6,6);
 
     // set the variances to the measurement variance
-    P[6][6] = sq(frontend->_gpsVertVelNoise);
-
+    if (useExtNavVel) {
+        P[6][6] = sq(extNavVelDelayed.err);
+    } else {
+        P[6][6] = sq(frontend->_gpsVertVelNoise);
+    }
 }
 
 // Zero the EKF height datum
@@ -698,13 +692,13 @@ void NavEKF3_core::FuseVelPosNED()
             } else if (posHealth || posTimeout) {
                 posHealth = true;
                 lastPosPassTime_ms = imuSampleTime_ms;
-                // if timed out or outside the specified uncertainty radius, reset to the GPS
+                // if timed out or outside the specified uncertainty radius, reset to the external sensor
                 if (posTimeout || ((P[8][8] + P[7][7]) > sq(float(frontend->_gpsGlitchRadiusMax)))) {
-                    // reset the position to the current GPS position
-                    ResetPosition();
-                    // reset the velocity to the GPS velocity
-                    ResetVelocity();
-                    // don't fuse GPS data on this time step
+                    // reset the position to the current external sensor position
+                    ResetPosition(resetDataSource::DEFAULT);
+                    // reset the velocity to the external sensor velocity
+                    ResetVelocity(resetDataSource::DEFAULT);
+                    // don't fuse external sensor data on this time step
                     fusePosData = false;
                     fuseVelData = false;
                     // Reset the position variances and corresponding covariances to a value that will pass the checks
@@ -752,11 +746,11 @@ void NavEKF3_core::FuseVelPosNED()
                 velHealth = true;
                 // restart the timeout count
                 lastVelPassTime_ms = imuSampleTime_ms;
-                // If we are doing full aiding and velocity fusion times out, reset to the GPS velocity
+                // If we are doing full aiding and velocity fusion times out, reset to the external sensor velocity
                 if (PV_AidingMode == AID_ABSOLUTE && velTimeout) {
-                    // reset the velocity to the GPS velocity
-                    ResetVelocity();
-                    // don't fuse GPS velocity data on this time step
+                    // reset the velocity to the external sensor velocity
+                    ResetVelocity(resetDataSource::DEFAULT);
+                    // don't fuse external sensor velocity data on this time step
                     fuseVelData = false;
                     // Reset the normalised innovation to avoid failing the bad fusion tests
                     velTestRatio = 0.0f;
@@ -1810,8 +1804,6 @@ void NavEKF3_core::SelectBodyOdomFusion()
         // start performance timer
         hal.util->perf_begin(_perf_FuseBodyOdom);
 
-        usingWheelSensors = false;
-
         // Fuse data into the main filter
         FuseBodyVel();
 
@@ -1838,7 +1830,6 @@ void NavEKF3_core::SelectBodyOdomFusion()
 
             // This is a hack to enable use of the existing body frame velocity fusion method
             // TODO write a dedicated observation model for wheel encoders
-            usingWheelSensors = true;
             bodyOdmDataDelayed.vel = prevTnb * velNED;
             bodyOdmDataDelayed.body_offset = wheelOdmDataDelayed.hub_offset;
             bodyOdmDataDelayed.velErr = frontend->_wencOdmVelErr;

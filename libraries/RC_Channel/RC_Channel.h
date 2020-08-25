@@ -184,6 +184,9 @@ public:
         AIRMODE =             84, // enable / disable airmode for copter
         GENERATOR   =         85, // generator control
         TER_DISABLE =         86, // disable terrain following in CRUISE/FBWB modes
+        CROW_SELECT =         87, // select CROW mode for diff spoilers;high disables,mid forces progressive
+        SOARING =             88, // three-position switch to set soaring mode
+
         // entries from 100 onwards are expected to be developer
         // options used for testing
         KILL_IMU1 =          100, // disable first IMU (for IMU failure testing)
@@ -199,6 +202,16 @@ public:
         MAINSAIL =           207, // mainsail input
         FLAP =               208, // flap input
         FWD_THR =            209, // VTOL manual forward throttle
+
+        // inputs for the use of onboard lua scripting
+        SCRIPTING_1 =        300,
+        SCRIPTING_2 =        301,
+        SCRIPTING_3 =        302,
+        SCRIPTING_4 =        303,
+        SCRIPTING_5 =        304,
+        SCRIPTING_6 =        305,
+        SCRIPTING_7 =        306,
+        SCRIPTING_8 =        307,
     };
     typedef enum AUX_FUNC aux_func_t;
 
@@ -416,6 +429,9 @@ public:
         return _override_timeout2.get() * 1e3f;
     }
 
+    // get mask of enabled protocols
+    uint32_t enabled_protocols() const;
+
     // returns true if we have had a direct detach RC reciever, does not include overrides
     bool has_had_rc_receiver() const { return _has_had_rc_receiver; }
 
@@ -457,6 +473,7 @@ private:
     AP_Float _override_timeout1;
     AP_Float _override_timeout2;
     AP_Int32  _options;
+    AP_Int32  _protocols;
 
     // flight_mode_channel_number must be overridden in vehicle specific code
     virtual int8_t flight_mode_channel_number() const = 0;

@@ -23,7 +23,7 @@
 
 #include <AP_Baro/AP_Baro.h>
 #include <AP_BoardConfig/AP_BoardConfig.h>     // board configuration library
-#include <AP_BoardConfig/AP_BoardConfig_CAN.h>
+#include <AP_CANManager/AP_CANManager.h>
 #include <AP_Button/AP_Button.h>
 #include <AP_GPS/AP_GPS.h>
 #include <AP_Generator/AP_Generator_RichenPower.h>
@@ -166,6 +166,9 @@ public:
         return AP_HAL::millis() - _last_flying_ms;
     }
 
+    // returns true if the vehicle has crashed
+    virtual bool is_crashed() const;
+
     /*
       methods to control vehicle for use by scripting
     */
@@ -179,6 +182,22 @@ public:
 
     // set steering and throttle (-1 to +1) (for use by scripting with Rover)
     virtual bool set_steering_and_throttle(float steering, float throttle) { return false; }
+
+    // control outputs enumeration
+    enum class ControlOutput {
+        Roll = 1,
+        Pitch = 2,
+        Throttle = 3,
+        Yaw = 4,
+        Lateral = 5,
+        MainSail = 6,
+        WingSail = 7,
+        Last_ControlOutput  // place new values before this
+    };
+
+    // get control output (for use in scripting)
+    // returns true on success and control_value is set to a value in the range -1 to +1
+    virtual bool get_control_output(AP_Vehicle::ControlOutput control_output, float &control_value) { return false; }
 
     // write out harmonic notch log messages
     void write_notch_log_messages() const;
@@ -194,9 +213,9 @@ protected:
     // board specific config
     AP_BoardConfig BoardConfig;
 
-#if HAL_WITH_UAVCAN
+#if HAL_MAX_CAN_PROTOCOL_DRIVERS
     // board specific config for CAN bus
-    AP_BoardConfig_CAN BoardConfig_CAN;
+    AP_CANManager can_mgr;
 #endif
 
     // main loop scheduler
@@ -250,12 +269,12 @@ protected:
 
     AP_ESC_Telem esc_telem;
 
-    static const struct AP_Param::GroupInfo var_info[];
-    static const struct AP_Scheduler::Task scheduler_tasks[];
-
 #if GENERATOR_ENABLED
     AP_Generator_RichenPower generator;
 #endif
+
+    static const struct AP_Param::GroupInfo var_info[];
+    static const struct AP_Scheduler::Task scheduler_tasks[];
 
 private:
 

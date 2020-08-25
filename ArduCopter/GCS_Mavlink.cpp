@@ -229,6 +229,18 @@ void GCS_MAVLINK_Copter::send_pid_tuning()
     }
 }
 
+// send winch status message
+void GCS_MAVLINK_Copter::send_winch_status() const
+{
+#if WINCH_ENABLED == ENABLED
+    AP_Winch *winch = AP::winch();
+    if (winch == nullptr) {
+        return;
+    }
+    winch->send_status(*this);
+#endif
+}
+
 uint8_t GCS_MAVLINK_Copter::sysid_my_gcs() const
 {
     return copter.g.sysid_my_gcs;
@@ -445,6 +457,7 @@ static const ap_message STREAM_EXTRA3_msgs[] = {
     MSG_RPM,
     MSG_ESC_TELEMETRY,
     MSG_GENERATOR_STATUS,
+    MSG_WINCH_STATUS,
 };
 static const ap_message STREAM_PARAMS_msgs[] = {
     MSG_NEXT_PARAM
@@ -644,7 +657,7 @@ MAV_RESULT GCS_MAVLINK_Copter::handle_command_mount(const mavlink_command_long_t
 {
     // if the mount doesn't do pan control then yaw the entire vehicle instead:
     switch (packet.command) {
-#if MOUNT == ENABLED
+#if HAL_MOUNT_ENABLED
     case MAV_CMD_DO_MOUNT_CONTROL:
         if (!copter.camera_mount.has_pan_control()) {
             copter.flightmode->auto_yaw.set_fixed_yaw(
@@ -683,6 +696,12 @@ MAV_RESULT GCS_MAVLINK_Copter::handle_command_long_packet(const mavlink_command_
         }
         return MAV_RESULT_ACCEPTED;
     }
+
+    case MAV_CMD_DO_LAND_START:
+        if (copter.mode_auto.mission.jump_to_landing_sequence() && copter.set_mode(Mode::Number::AUTO, ModeReason::GCS_COMMAND)) {
+            return MAV_RESULT_ACCEPTED;
+        }
+        return MAV_RESULT_FAILED;
 
     case MAV_CMD_NAV_LOITER_UNLIM:
         if (!copter.set_mode(Mode::Number::LOITER, ModeReason::GCS_COMMAND)) {
@@ -785,11 +804,11 @@ MAV_RESULT GCS_MAVLINK_Copter::handle_command_long_packet(const mavlink_command_
         // param3 : throttle (range depends upon param2)
         // param4 : timeout (in seconds)
         // param5 : num_motors (in sequence)
-        // param6 : compass learning (0: disabled, 1: enabled)
+        // param6 : motor test order
         return copter.mavlink_motor_test_start(*this,
                                                (uint8_t)packet.param1,
                                                (uint8_t)packet.param2,
-                                               (uint16_t)packet.param3,
+                                               packet.param3,
                                                packet.param4,
                                                (uint8_t)packet.param5);
 
@@ -803,20 +822,14 @@ MAV_RESULT GCS_MAVLINK_Copter::handle_command_long_packet(const mavlink_command_
         switch ((uint8_t)packet.param2) {
         case WINCH_RELAXED:
             copter.g2.winch.relax();
-            AP::logger().Write_Event(LogEvent::WINCH_RELAXED);
             return MAV_RESULT_ACCEPTED;
         case WINCH_RELATIVE_LENGTH_CONTROL: {
-            copter.g2.winch.release_length(packet.param3, fabsf(packet.param4));
-            AP::logger().Write_Event(LogEvent::WINCH_LENGTH_CONTROL);
+            copter.g2.winch.release_length(packet.param3);
             return MAV_RESULT_ACCEPTED;
         }
         case WINCH_RATE_CONTROL:
-            if (fabsf(packet.param4) <= copter.g2.winch.get_rate_max()) {
-                copter.g2.winch.set_desired_rate(packet.param4);
-                AP::logger().Write_Event(LogEvent::WINCH_RATE_CONTROL);
-                return MAV_RESULT_ACCEPTED;
-            }
-            return MAV_RESULT_FAILED;
+            copter.g2.winch.set_desired_rate(packet.param4);
+            return MAV_RESULT_ACCEPTED;
         default:
             break;
         }
@@ -913,7 +926,7 @@ MAV_RESULT GCS_MAVLINK_Copter::handle_command_long_packet(const mavlink_command_
 void GCS_MAVLINK_Copter::handle_mount_message(const mavlink_message_t &msg)
 {
     switch (msg.msgid) {
-#if MOUNT == ENABLED
+#if HAL_MOUNT_ENABLED
     case MAVLINK_MSG_ID_MOUNT_CONTROL:
         if (!copter.camera_mount.has_pan_control()) {
             // if the mount doesn't do pan control then yaw the entire vehicle instead:
@@ -932,6 +945,27 @@ void GCS_MAVLINK_Copter::handle_mount_message(const mavlink_message_t &msg)
 
 void GCS_MAVLINK_Copter::handleMessage(const mavlink_message_t &msg)
 {
+    // for mavlink SET_POSITION_TARGET messages
+    constexpr uint32_t MAVLINK_SET_POS_TYPE_MASK_POS_IGNORE =
+        POSITION_TARGET_TYPEMASK_X_IGNORE |
+        POSITION_TARGET_TYPEMASK_Y_IGNORE |
+        POSITION_TARGET_TYPEMASK_Z_IGNORE;
+
+    constexpr uint32_t MAVLINK_SET_POS_TYPE_MASK_VEL_IGNORE =
+        POSITION_TARGET_TYPEMASK_VX_IGNORE |
+        POSITION_TARGET_TYPEMASK_VY_IGNORE |
+        POSITION_TARGET_TYPEMASK_VZ_IGNORE;
+
+    constexpr uint32_t MAVLINK_SET_POS_TYPE_MASK_ACC_IGNORE =
+        POSITION_TARGET_TYPEMASK_AX_IGNORE |
+        POSITION_TARGET_TYPEMASK_AY_IGNORE |
+        POSITION_TARGET_TYPEMASK_AZ_IGNORE;
+
+    constexpr uint32_t MAVLINK_SET_POS_TYPE_MASK_YAW_IGNORE =
+        POSITION_TARGET_TYPEMASK_YAW_IGNORE;
+    constexpr uint32_t MAVLINK_SET_POS_TYPE_MASK_YAW_RATE_IGNORE =
+        POSITION_TARGET_TYPEMASK_YAW_RATE_IGNORE;
+
     switch (msg.msgid) {
 
     case MAVLINK_MSG_ID_HEARTBEAT:      // MAV ID: 0
@@ -988,17 +1022,25 @@ void GCS_MAVLINK_Copter::handleMessage(const mavlink_message_t &msg)
             break;
         }
 
-        // convert thrust to climb rate
-        packet.thrust = constrain_float(packet.thrust, 0.0f, 1.0f);
-        float climb_rate_cms = 0.0f;
-        if (is_equal(packet.thrust, 0.5f)) {
-            climb_rate_cms = 0.0f;
-        } else if (packet.thrust > 0.5f) {
-            // climb at up to WPNAV_SPEED_UP
-            climb_rate_cms = (packet.thrust - 0.5f) * 2.0f * copter.wp_nav->get_default_speed_up();
+        // check if the message's thrust field should be interpreted as a climb rate or as thrust
+        const bool use_thrust = copter.g2.dev_options.get() & DevOptionSetAttitudeTarget_ThrustAsThrust;
+
+        float climb_rate_or_thrust;
+        if (use_thrust) {
+            // interpret thrust as thrust
+            climb_rate_or_thrust = constrain_float(packet.thrust, -1.0f, 1.0f);
         } else {
-            // descend at up to WPNAV_SPEED_DN
-            climb_rate_cms = (0.5f - packet.thrust) * 2.0f * -fabsf(copter.wp_nav->get_default_speed_down());
+            // convert thrust to climb rate
+            packet.thrust = constrain_float(packet.thrust, 0.0f, 1.0f);
+            if (is_equal(packet.thrust, 0.5f)) {
+                climb_rate_or_thrust = 0.0f;
+            } else if (packet.thrust > 0.5f) {
+                // climb at up to WPNAV_SPEED_UP
+                climb_rate_or_thrust = (packet.thrust - 0.5f) * 2.0f * copter.wp_nav->get_default_speed_up();
+            } else {
+                // descend at up to WPNAV_SPEED_DN
+                climb_rate_or_thrust = (0.5f - packet.thrust) * 2.0f * -fabsf(copter.wp_nav->get_default_speed_down());
+            }
         }
 
         // if the body_yaw_rate field is ignored, use the commanded yaw position
@@ -1009,7 +1051,7 @@ void GCS_MAVLINK_Copter::handleMessage(const mavlink_message_t &msg)
         }
 
         copter.mode_guided.set_angle(Quaternion(packet.q[0],packet.q[1],packet.q[2],packet.q[3]),
-            climb_rate_cms, use_yaw_rate, packet.body_yaw_rate);
+                climb_rate_or_thrust, use_yaw_rate, packet.body_yaw_rate, use_thrust);
 
         break;
     }

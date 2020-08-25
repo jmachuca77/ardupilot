@@ -182,6 +182,8 @@ void Plane::read_radio()
 {
     if (!rc().read_input()) {
         control_failsafe();
+        airspeed_nudge_cm = 0;
+        throttle_nudge = 0;
         return;
     }
 
@@ -250,7 +252,7 @@ int16_t Plane::rudder_input(void)
 
 void Plane::control_failsafe()
 {
-    if (millis() - failsafe.last_valid_rc_ms > 1000 || rc_failsafe_active()) {
+    if (rc_failsafe_active()) {
         // we do not have valid RC input. Set all primary channel
         // control inputs to the trim value and throttle to min
         channel_roll->set_radio_in(channel_roll->get_radio_trim());
@@ -283,7 +285,7 @@ void Plane::control_failsafe()
         }
     }
 
-    if(g.throttle_fs_enabled == 0) {
+    if (ThrFailsafe(g.throttle_fs_enabled.get()) != ThrFailsafe::Enabled) {
         return;
     }
 
@@ -376,7 +378,7 @@ bool Plane::trim_radio()
  */
 bool Plane::rc_throttle_value_ok(void) const
 {
-    if (!g.throttle_fs_enabled) {
+    if (ThrFailsafe(g.throttle_fs_enabled.get()) == ThrFailsafe::Disabled) {
         return true;
     }
     if (channel_throttle->get_reverse()) {
