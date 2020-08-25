@@ -692,9 +692,12 @@ void GCS_MAVLINK_Rover::handleMessage(const mavlink_message_t &msg)
     switch (msg.msgid) {
     case MAVLINK_MSG_ID_MANUAL_CONTROL:
     {
-        if (msg.sysid != rover.g.sysid_my_gcs) {  // Only accept control from our gcs
-            break;
+        if (rover.g.sysid_my_gcs != 0) {
+            if (msg.sysid != rover.g.sysid_my_gcs) {  // Only accept control from our gcs
+                break;
+            }
         }
+
 
         mavlink_manual_control_t packet;
         mavlink_msg_manual_control_decode(&msg, &packet);
@@ -715,9 +718,12 @@ void GCS_MAVLINK_Rover::handleMessage(const mavlink_message_t &msg)
     case MAVLINK_MSG_ID_HEARTBEAT:
         {
             // we keep track of the last time we received a heartbeat from our GCS for failsafe purposes
-            if (msg.sysid != rover.g.sysid_my_gcs) {
-                break;
+            if(rover.g.sysid_my_gcs != 0) {
+                if (msg.sysid != rover.g.sysid_my_gcs) {
+                    break;
+                }
             }
+
             rover.failsafe.last_heartbeat_ms = AP_HAL::millis();
             break;
         }

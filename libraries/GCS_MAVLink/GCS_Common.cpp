@@ -3101,9 +3101,12 @@ void GCS_MAVLINK::handle_command_ack(const mavlink_message_t &msg)
 // control of switch position and RC PWM values.
 void GCS_MAVLINK::handle_rc_channels_override(const mavlink_message_t &msg)
 {
-    if(msg.sysid != sysid_my_gcs()) {
-        return; // Only accept control from our gcs
+    if (sysid_my_gcs() != 0) {
+        if(msg.sysid != sysid_my_gcs()) {
+            return; // Only accept control from our gcs
+        }       
     }
+
 
     const uint32_t tnow = AP_HAL::millis();
 
@@ -4942,7 +4945,7 @@ bool GCS_MAVLINK::accept_packet(const mavlink_status_t &status,
         return true;
     }
 
-    if (msg.sysid == sysid_my_gcs()) {
+    if ((msg.sysid == sysid_my_gcs()) || (sysid_my_gcs() == 0)) {
         return true;
     }
 
