@@ -22,6 +22,14 @@ void ModeManual::update()
         brake = rover.g2.attitude_control.get_brake_manual_pct();
     }
 
+    // walking robots support roll, pitch and walking_height
+    float desired_roll, desired_pitch, desired_walking_height;
+    get_pilot_desired_roll_and_pitch(desired_roll, desired_pitch);
+    get_pilot_desired_walking_height(desired_walking_height);
+    g2.motors.set_roll(desired_roll);
+    g2.motors.set_pitch(desired_pitch);
+    g2.motors.set_walking_height(desired_walking_height);
+
     // set sailboat sails
     float desired_mainsail;
     float desired_wingsail;

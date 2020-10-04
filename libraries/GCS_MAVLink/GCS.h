@@ -395,6 +395,8 @@ protected:
     void handle_distance_sensor(const mavlink_message_t &msg);
     void handle_obstacle_distance(const mavlink_message_t &msg);
 
+    void handle_osd_param_config(const mavlink_message_t &msg);
+
     void handle_common_param_message(const mavlink_message_t &msg);
     void handle_param_set(const mavlink_message_t &msg);
     void handle_param_request_list(const mavlink_message_t &msg);
@@ -415,7 +417,6 @@ protected:
     void handle_common_message(const mavlink_message_t &msg);
     void handle_set_gps_global_origin(const mavlink_message_t &msg);
     void handle_setup_signing(const mavlink_message_t &msg);
-    virtual bool should_zero_rc_outputs_on_reboot() const { return false; }
     virtual MAV_RESULT handle_preflight_reboot(const mavlink_command_long_t &packet);
 
     MAV_RESULT handle_engine_control(const mavlink_command_long_t &packet);
@@ -828,8 +829,6 @@ private:
     // we cache the current location and send it even if the AHRS has
     // no idea where we are:
     struct Location global_position_current_loc;
-
-    void zero_rc_outputs();
 
     uint8_t last_tx_seq;
     uint16_t send_packet_count;

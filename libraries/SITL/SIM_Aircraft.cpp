@@ -41,25 +41,7 @@ using namespace SITL;
  */
 
 Aircraft::Aircraft(const char *frame_str) :
-    ground_level(0.0f),
-    frame_height(0.0f),
-    dcm(),
-    gyro(),
-    velocity_ef(),
-    mass(0.0f),
-    accel_body(0.0f, 0.0f, -GRAVITY_MSS),
-    time_now_us(0),
-    gyro_noise(radians(0.1f)),
-    accel_noise(0.3f),
-    rate_hz(1200.0f),
-    autotest_dir(nullptr),
-    frame(frame_str),
-    num_motors(1),
-#if defined(__CYGWIN__) || defined(__CYGWIN64__)
-    min_sleep_time(20000)
-#else
-    min_sleep_time(5000)
-#endif
+    frame(frame_str)
 {
     // make the SIM_* variables available to simulator backends
     sitl = AP::sitl();
@@ -67,7 +49,6 @@ Aircraft::Aircraft(const char *frame_str) :
     set_speedup(1.0f);
 
     last_wall_time_us = get_wall_time_us();
-    frame_counter = 0;
 
     // allow for orientation settings, such as with tailsitters
     enum ap_var_type ptype;
@@ -279,12 +260,14 @@ void Aircraft::sync_frame_time(void)
     uint32_t now_ms = last_wall_time_us / 1000ULL;
     float dt_wall = (now_ms - last_fps_report_ms) * 0.001;
     if (dt_wall > 2.0) {
+#if 0
         const float achieved_rate_hz = (frame_counter - last_frame_count) / dt_wall;
-        last_frame_count = frame_counter;
-        last_fps_report_ms = now_ms;
         ::printf("Rate: target:%.1f achieved:%.1f speedup %.1f/%.1f\n",
                  rate_hz*target_speedup, achieved_rate_hz,
                  achieved_rate_hz/rate_hz, target_speedup);
+#endif
+        last_frame_count = frame_counter;
+        last_fps_report_ms = now_ms;
     }
 }
 
@@ -382,6 +365,9 @@ void Aircraft::fill_fdm(struct sitl_fdm &fdm)
     // copy rangefinder
     memcpy(fdm.rangefinder_m, rangefinder_m, sizeof(fdm.rangefinder_m));
 
+    fdm.wind_vane_apparent.direction = wind_vane_apparent.direction;
+    fdm.wind_vane_apparent.speed = wind_vane_apparent.speed;
+
     if (is_smoothed) {
         fdm.xAccel = smoothing.accel_body.x;
         fdm.yAccel = smoothing.accel_body.y;
@@ -431,6 +417,11 @@ void Aircraft::fill_fdm(struct sitl_fdm &fdm)
             fdm.yawDeg   = degrees(y);
             fdm.quaternion.from_rotation_matrix(m);
         }
+    }
+
+    // in the first call here, if a speedup option is specified, overwrite it
+    if (is_equal(last_speedup, -1.0f) && !is_equal(get_speedup(), 1.0f)) {
+        sitl->speedup = get_speedup();
     }
     
     if (!is_equal(last_speedup, float(sitl->speedup)) && sitl->speedup > 0) {

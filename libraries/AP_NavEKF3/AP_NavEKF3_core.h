@@ -171,8 +171,11 @@ public:
     // return body magnetic field estimates in measurement units / 1000
     void getMagXYZ(Vector3f &magXYZ) const;
 
-    // return the index for the active magnetometer
+    // return the index for the active sensors
     uint8_t getActiveMag() const;
+    uint8_t getActiveBaro() const;
+    uint8_t getActiveGPS() const;
+    uint8_t getActiveAirspeed() const;
 
     // Return estimated magnetometer offsets
     // Return true if magnetometer offsets are valid
@@ -442,6 +445,16 @@ public:
     // request a reset the yaw to the EKF-GSF value
     void EKFGSF_requestYawReset();
 
+    // return true if we are tilt aligned
+    bool have_aligned_tilt(void) const {
+        return tiltAlignComplete;
+    }
+
+    // return true if we are yaw aligned
+    bool have_aligned_yaw(void) const {
+        return yawAlignComplete;
+    }
+    
 private:
     EKFGSF_yaw *yawEstimator;
 
@@ -510,14 +523,14 @@ private:
     // broken down as individual elements. Both are equivalent (same
     // memory)
     struct state_elements {
-        Quaternion  quat;           // quaternion defining rotation from local NED earth frame to body frame
-        Vector3f    velocity;       // velocity of IMU in local NED earth frame (m/sec)
-        Vector3f    position;       // position of IMU in local NED earth frame (m)
-        Vector3f    gyro_bias;      // body frame delta angle IMU bias vector (rad)
-        Vector3f    accel_bias;     // body frame delta velocity IMU bias vector (m/sec)
-        Vector3f    earth_magfield; // earth frame magnetic field vector (Gauss)
-        Vector3f    body_magfield;  // body frame magnetic field vector (Gauss)
-        Vector2f    wind_vel;       // horizontal North East wind velocity vector in local NED earth frame (m/sec)
+        Quaternion  quat;           // quaternion defining rotation from local NED earth frame to body frame 0..3
+        Vector3f    velocity;       // velocity of IMU in local NED earth frame (m/sec) 4..6
+        Vector3f    position;       // position of IMU in local NED earth frame (m)     7..9
+        Vector3f    gyro_bias;      // body frame delta angle IMU bias vector (rad)     10..12
+        Vector3f    accel_bias;     // body frame delta velocity IMU bias vector (m/sec) 13..15
+        Vector3f    earth_magfield; // earth frame magnetic field vector (Gauss)         16..18
+        Vector3f    body_magfield;  // body frame magnetic field vector (Gauss)          19..21
+        Vector2f    wind_vel;       // horizontal North East wind velocity vector in local NED earth frame (m/sec) 22..23
     };
 
     union {
@@ -768,6 +781,9 @@ private:
 
     // check for new magnetometer data and update store measurements if available
     void readMagData();
+
+    // try changing compasses on compass failure or timeout
+    void tryChangeCompass(void);
 
     // check for new airspeed data and update stored measurements if available
     void readAirSpdData();
@@ -1044,6 +1060,7 @@ private:
     uint32_t prevTasStep_ms;        // time stamp of last TAS fusion step
     uint32_t prevBetaStep_ms;       // time stamp of last synthetic sideslip fusion step
     uint32_t lastMagUpdate_us;      // last time compass was updated in usec
+    uint32_t lastMagRead_ms;        // last time compass data was successfully read
     Vector3f velDotNED;             // rate of change of velocity in NED frame
     Vector3f velDotNEDfilt;         // low pass filtered velDotNED
     uint32_t imuSampleTime_ms;      // time that the last IMU value was taken
@@ -1071,6 +1088,8 @@ private:
     float tasTestRatio;             // sum of squares of true airspeed innovation divided by fail threshold
     bool inhibitWindStates;         // true when wind states and covariances are to remain constant
     bool inhibitMagStates;          // true when magnetic field states are inactive
+    bool lastInhibitMagStates;      // previous inhibitMagStates
+    bool needMagBodyVarReset;       // we need to reset mag body variances at next CovariancePrediction
     bool inhibitDelVelBiasStates;   // true when IMU delta velocity bias states are inactive
     bool inhibitDelAngBiasStates;   // true when IMU delta angle bias states are inactive
     bool gpsNotAvailable;           // bool true when valid GPS data is not available
@@ -1105,7 +1124,6 @@ private:
     tas_elements tasDataNew;        // TAS data at the current time horizon
     tas_elements tasDataDelayed;    // TAS data at the fusion time horizon
     uint8_t tasStoreIndex;          // TAS data storage index
-    mag_elements magDataNew;        // Magnetometer data at the current time horizon
     mag_elements magDataDelayed;    // Magnetometer data at the fusion time horizon
     uint8_t magStoreIndex;          // Magnetometer data storage index
     gps_elements gpsDataNew;        // GPS data at the current time horizon
@@ -1482,4 +1500,28 @@ private:
     uint8_t EKFGSF_yaw_reset_count;         // number of emergency yaw resets performed
     bool EKFGSF_run_filterbank;             // true when the filter bank is active
     uint8_t EKFGSF_yaw_valid_count;         // number of updates since the last invalid yaw estimate
+
+    // bits in EK3_AFFINITY
+    enum ekf_affinity {
+        EKF_AFFINITY_GPS  = (1U<<0),
+        EKF_AFFINITY_BARO = (1U<<1),
+        EKF_AFFINITY_MAG  = (1U<<2),
+        EKF_AFFINITY_ARSP = (1U<<3),
+    };
+
+    // update selected_sensors for this core
+    void update_sensor_selection(void);
+    void update_gps_selection(void);
+    void update_mag_selection(void);
+    void update_baro_selection(void);
+    void update_airspeed_selection(void);
+
+    // selected and preferred sensor instances. We separate selected
+    // from preferred so that calcGpsGoodToAlign() can ensure the
+    // preferred sensor is ready. Note that magSelectIndex is used for
+    // compass selection
+    uint8_t selected_gps;
+    uint8_t preferred_gps;
+    uint8_t selected_baro;
+    uint8_t selected_airspeed;
 };

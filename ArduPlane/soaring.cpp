@@ -1,6 +1,6 @@
 #include "Plane.h"
 
-#if SOARING_ENABLED == ENABLED
+#if HAL_SOARING_ENABLED
 
 /*
 *  ArduSoar support function
@@ -22,17 +22,12 @@ void Plane::update_soaring() {
     // Check for throttle suppression change.
     switch (control_mode->mode_number()) {
     case Mode::Number::AUTO:
-        g2.soaring_controller.suppress_throttle();
-        break;
     case Mode::Number::FLY_BY_WIRE_B:
     case Mode::Number::CRUISE:
-        if (!g2.soaring_controller.suppress_throttle() && aparm.throttle_max > 0) {
-            gcs().send_text(MAV_SEVERITY_INFO, "Soaring: forcing RTL");
-            set_mode(mode_rtl, ModeReason::SOARING_FBW_B_WITH_MOTOR_RUNNING);
-        }
+        g2.soaring_controller.suppress_throttle();
         break;
-    case Mode::Number::LOITER:
-        // Never use throttle in LOITER with soaring active.
+    case Mode::Number::THERMAL:
+        // Never use throttle in THERMAL with soaring active.
         g2.soaring_controller.set_throttle_suppressed(true);
         break;
     default:
@@ -57,12 +52,12 @@ void Plane::update_soaring() {
         g2.soaring_controller.update_cruising();
 
         if (g2.soaring_controller.check_thermal_criteria()) {
-            gcs().send_text(MAV_SEVERITY_INFO, "Soaring: Thermal detected, entering %s", mode_loiter.name());
-            set_mode(mode_loiter, ModeReason::SOARING_THERMAL_DETECTED);
+            gcs().send_text(MAV_SEVERITY_INFO, "Soaring: Thermal detected, entering %s", mode_thermal.name());
+            set_mode(mode_thermal, ModeReason::SOARING_THERMAL_DETECTED);
         }
         break;
 
-    case Mode::Number::LOITER: {
+    case Mode::Number::THERMAL: {
         // Update thermal estimate and check for switch back to AUTO
         g2.soaring_controller.update_thermalling();  // Update estimate
 
@@ -116,36 +111,30 @@ void Plane::update_soaring() {
 
         // Some other loiter status, we need to think about exiting loiter.
         const uint32_t time_in_loiter_ms = AP_HAL::millis() - plane.soaring_mode_timer_ms;
+        const uint32_t timeout = MIN(1000*g2.soaring_controller.get_circling_time(), 20000);
 
-        if (!soaring_exit_heading_aligned() && loiterStatus!=SoaringController::LoiterStatus::ALT_TOO_LOW && time_in_loiter_ms < 20000) {
+        if (!soaring_exit_heading_aligned() && loiterStatus != SoaringController::LoiterStatus::ALT_TOO_LOW && time_in_loiter_ms < timeout) {
             // Heading not lined up, and not timed out or in a condition requiring immediate exit.
             break;
         }
 
-        // Heading lined up and loiter status not good to continue. Need to switch mode.
-
-        // Determine appropriate mode.
-        Mode* exit_mode = previous_mode;
-
-        if (loiterStatus == SoaringController::LoiterStatus::ALT_TOO_LOW && 
-           ((previous_mode == &mode_cruise) || (previous_mode == &mode_fbwb))) {
-            exit_mode = &mode_rtl;
-        }
-
-        // Print message and set mode.
+        // Heading lined up and loiter status not good to continue. Need to restore previous mode.
         switch (loiterStatus) {
         case SoaringController::LoiterStatus::ALT_TOO_HIGH:
-            soaring_restore_mode("Too high", ModeReason::SOARING_ALT_TOO_HIGH, *exit_mode);
+            soaring_restore_mode("Too high", ModeReason::SOARING_ALT_TOO_HIGH);
             break;
         case SoaringController::LoiterStatus::ALT_TOO_LOW:
-            soaring_restore_mode("Too low", ModeReason::SOARING_ALT_TOO_LOW, *exit_mode);
+            soaring_restore_mode("Too low", ModeReason::SOARING_ALT_TOO_LOW);
             break;
         default:
         case SoaringController::LoiterStatus::THERMAL_WEAK:
-            soaring_restore_mode("Thermal ended", ModeReason::SOARING_THERMAL_ESTIMATE_DETERIORATED, *exit_mode);
+            soaring_restore_mode("Thermal ended", ModeReason::SOARING_THERMAL_ESTIMATE_DETERIORATED);
             break;
         case SoaringController::LoiterStatus::DRIFT_EXCEEDED:
-            soaring_restore_mode("Drifted too far", ModeReason::SOARING_DRIFT_EXCEEDED, *exit_mode);
+            soaring_restore_mode("Drifted too far", ModeReason::SOARING_DRIFT_EXCEEDED);
+            break;
+        case SoaringController::LoiterStatus::EXIT_COMMANDED:
+            soaring_restore_mode("Exit via RC switch", ModeReason::RC_COMMAND);
             break;
         } // switch loiterStatus
 
@@ -177,10 +166,10 @@ bool Plane::soaring_exit_heading_aligned() const
     return true;
 }
 
-void Plane::soaring_restore_mode(const char *reason, ModeReason modereason, Mode &exit_mode)
+void Plane::soaring_restore_mode(const char *reason, ModeReason modereason)
 {
-    gcs().send_text(MAV_SEVERITY_INFO, "Soaring: %s, restoring %s", reason, exit_mode.name());
-    set_mode(exit_mode, modereason);
+    gcs().send_text(MAV_SEVERITY_INFO, "Soaring: %s, restoring %s", reason, previous_mode->name());
+    set_mode(*previous_mode, modereason);
 }
 
 #endif // SOARING_ENABLED

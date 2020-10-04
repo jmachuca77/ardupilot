@@ -138,20 +138,24 @@ class AutoTestCopter(AutoTest):
 
     def wait_for_alt(self, alt_min=30, timeout=30):
         """Wait for altitude to be reached."""
-        m = self.mav.recv_match(type='GLOBAL_POSITION_INT', blocking=True)
-        alt = m.relative_alt / 1000.0 # mm -> m
-        if alt < alt_min:
-            self.wait_altitude(alt_min - 1,
-                               (alt_min + 5),
-                               relative=True,
-                               timeout=timeout)
+        self.wait_altitude(alt_min - 1,
+                           (alt_min + 5),
+                           relative=True,
+                           timeout=timeout)
 
     def land_and_disarm(self, timeout=60):
         """Land the quad."""
         self.progress("STARTING LANDING")
         self.change_mode("LAND")
-        self.wait_altitude(-5, 1, relative=True, timeout=timeout)
-        self.progress("LANDING: ok!")
+        self.wait_landed_and_disarmed(timeout=timeout)
+
+    def wait_landed_and_disarmed(self, min_alt=6, timeout=60):
+        """Wait to be landed and disarmed"""
+        m = self.mav.recv_match(type='GLOBAL_POSITION_INT', blocking=True)
+        alt = m.relative_alt / 1000.0 # mm -> m
+        if alt > min_alt:
+            self.wait_for_alt(min_alt, timeout=timeout)
+#        self.wait_statustext("SIM Hit ground", timeout=timeout)
         self.wait_disarmed()
 
     def hover(self, hover_throttle=1500):
@@ -188,7 +192,7 @@ class AutoTestCopter(AutoTest):
         self.delay_sim_time(10)
         self.set_rc(2, 1500)
         self.hover()
-        self.progress("Cotper staging 50 meters east of home at 50 meters altitude In mode Alt Hold")
+        self.progress("Copter staging 50 meters east of home at 50 meters altitude In mode Alt Hold")
 
     # Start and stop the GCS heartbeat for GCS failsafe testing
     def set_heartbeat_rate(self, rate):
@@ -396,30 +400,42 @@ class AutoTestCopter(AutoTest):
         self.change_mode('AUTO')
         self.wait_waypoint(0, num_wp-1, timeout=500)
         self.progress("test: MISSION COMPLETE: passed!")
-        self.change_mode('LAND')
-        self.wait_disarmed()
+        self.land_and_disarm()
 
     # enter RTL mode and wait for the vehicle to disarm
-    def do_RTL(self, timeout=250):
-        """Return, land."""
+    def do_RTL(self, distance_min=None, check_alt=True, distance_max=10, timeout=250):
+        """Enter RTL mode and wait for the vehicle to disarm at Home."""
         self.change_mode("RTL")
-        self.set_rc(3, 1500)
+        self.hover()
+        self.wait_rtl_complete(check_alt=check_alt, distance_max=distance_max, timeout=timeout)
+
+    def wait_rtl_complete(self, check_alt=True, distance_max=10, timeout=250):
+        """Wait for RTL to reach home and disarm"""
+        self.progress("Waiting RTL to reach Home and disarm")
         tstart = self.get_sim_time()
         while self.get_sim_time_cached() < tstart + timeout:
             m = self.mav.recv_match(type='GLOBAL_POSITION_INT', blocking=True)
             alt = m.relative_alt / 1000.0 # mm -> m
             home_distance = self.distance_to_home(use_cached_home=True)
             home = ""
-            if alt <= 1 and home_distance < 10:
-                home = "HOME"
+            alt_valid = alt <= 1
+            distance_valid = home_distance < distance_max
+            if check_alt:
+                if alt_valid and distance_valid:
+                    home = "HOME"
+            else:
+                if distance_valid:
+                    home = "HOME"
             self.progress("Alt: %.02f  HomeDist: %.02f %s" %
                           (alt, home_distance, home))
+
             # our post-condition is that we are disarmed:
             if not self.armed():
                 if home == "":
                     raise NotAchievedException("Did not get home")
                 # success!
                 return
+
         raise AutoTestTimeoutException("Did not get home and disarm")
 
     def fly_loiter_to_alt(self):
@@ -431,7 +447,6 @@ class AutoTestCopter(AutoTest):
         try:
 
             self.set_parameter("PLND_ENABLED", 1)
-            self.fetch_parameters()
             self.set_parameter("PLND_TYPE", 4)
 
             self.set_analog_rangefinder_parameters()
@@ -510,7 +525,7 @@ class AutoTestCopter(AutoTest):
         self.start_subtest("Radio failsafe RTL with no options test: FS_THR_ENABLE=1 & FS_OPTIONS=0")
         self.set_parameter("SIM_RC_FAIL", 1)
         self.wait_mode("RTL")
-        self.wait_disarmed()
+        self.wait_rtl_complete()
         self.set_parameter("SIM_RC_FAIL", 0)
         self.end_subtest("Completed Radio failsafe RTL with no options test")
 
@@ -520,7 +535,7 @@ class AutoTestCopter(AutoTest):
         self.takeoffAndMoveAway()
         self.set_parameter("SIM_RC_FAIL", 1)
         self.wait_mode("LAND")
-        self.wait_disarmed()
+        self.wait_landed_and_disarmed()
         self.set_parameter("SIM_RC_FAIL", 0)
         self.end_subtest("Completed Radio failsafe LAND with no options test")
 
@@ -552,7 +567,7 @@ class AutoTestCopter(AutoTest):
         self.delay_sim_time(5)
         self.set_parameter("SIM_RC_FAIL", 1)
         self.wait_mode("LAND")
-        self.wait_disarmed()
+        self.wait_landed_and_disarmed()
         self.set_parameter("SIM_RC_FAIL", 0)
         self.set_parameter('SIM_GPS_DISABLE', 0)
         self.wait_ekf_happy()
@@ -566,7 +581,7 @@ class AutoTestCopter(AutoTest):
         self.delay_sim_time(5)
         self.set_parameter("SIM_RC_FAIL", 1)
         self.wait_mode("LAND")
-        self.wait_disarmed()
+        self.wait_landed_and_disarmed()
         self.set_parameter("SIM_RC_FAIL", 0)
         self.set_parameter('SIM_GPS_DISABLE', 0)
         self.wait_ekf_happy()
@@ -580,7 +595,7 @@ class AutoTestCopter(AutoTest):
         self.delay_sim_time(5)
         self.set_parameter("SIM_RC_FAIL", 1)
         self.wait_mode("LAND")
-        self.wait_disarmed()
+        self.wait_landed_and_disarmed()
         self.set_parameter("SIM_RC_FAIL", 0)
         self.set_parameter('SIM_GPS_DISABLE', 0)
         self.wait_ekf_happy()
@@ -597,7 +612,7 @@ class AutoTestCopter(AutoTest):
         self.delay_sim_time(5)
         self.set_parameter("SIM_RC_FAIL", 1)
         self.wait_mode("RTL")
-        self.wait_disarmed()
+        self.wait_rtl_complete()
         self.set_parameter("SIM_RC_FAIL", 0)
         self.end_subtest("Completed Radio failsafe SmartRTL->RTL fails into RTL mode due to no path.")
 
@@ -612,7 +627,7 @@ class AutoTestCopter(AutoTest):
         self.delay_sim_time(5)
         self.set_parameter("SIM_RC_FAIL", 1)
         self.wait_mode("LAND")
-        self.wait_disarmed()
+        self.wait_landed_and_disarmed()
         self.set_parameter("SIM_RC_FAIL", 0)
         self.end_subtest("Completed Radio failsafe SmartRTL->LAND fails into land mode due to no path.")
 
@@ -641,7 +656,7 @@ class AutoTestCopter(AutoTest):
         num_wp = self.load_mission("copter_mission.txt")
         if not num_wp:
             raise NotAchievedException("load copter_mission failed")
-        self.takeoffAndMoveAway()
+#        self.takeoffAndMoveAway()
         self.change_mode("AUTO")
         self.set_parameter("SIM_RC_FAIL", 1)
         self.delay_sim_time(5)
@@ -658,7 +673,7 @@ class AutoTestCopter(AutoTest):
         self.set_parameter('FS_OPTIONS', 0)
         self.set_parameter("SIM_RC_FAIL", 1)
         self.wait_mode("RTL")
-        self.wait_disarmed()
+        self.wait_rtl_complete()
         self.clear_mission_using_mavproxy()
         self.set_parameter("SIM_RC_FAIL", 0)
         self.end_subtest("Completed Radio failsafe RTL in mission without option to continue")
@@ -678,6 +693,43 @@ class AutoTestCopter(AutoTest):
             raise ex
 
     def test_gcs_failsafe(self, side=60, timeout=360):
+        # Test double-SmartRTL; ensure we do SmarRTL twice rather than
+        # landing (tests fix for actual bug)
+        self.context_push()
+        self.start_subtest("GCS failsafe SmartRTL twice")
+        self.setGCSfailsafe(3)
+        self.set_parameter('FS_OPTIONS', 8)
+        self.takeoffAndMoveAway()
+        self.set_heartbeat_rate(0)
+        self.wait_mode("SMART_RTL")
+        self.wait_disarmed()
+        self.set_heartbeat_rate(self.speedup)
+        self.mavproxy.expect("GCS Failsafe Cleared")
+
+        self.takeoffAndMoveAway()
+        self.set_heartbeat_rate(0)
+        self.wait_statustext("GCS Failsafe")
+        def ensure_smartrtl(mav, m):
+            if m.get_type() != "HEARTBEAT":
+                return
+            # can't use mode_is here because we're in the message hook
+            print("Mode: %s" % self.mav.flightmode)
+            if self.mav.flightmode != "SMART_RTL":
+                raise NotAchievedException("Not in SMART_RTL")
+        self.install_message_hook_context(ensure_smartrtl)
+
+        self.set_heartbeat_rate(self.speedup)
+        self.mavproxy.expect("GCS Failsafe Cleared")
+        self.set_heartbeat_rate(0)
+        self.wait_statustext("GCS Failsafe")
+
+        self.wait_disarmed()
+
+        self.end_subtest("GCS failsafe SmartRTL twice")
+        self.set_heartbeat_rate(self.speedup)
+        self.mavproxy.expect("GCS Failsafe Cleared")
+        self.context_pop()
+
         # Trigger telemety loss with failsafe disabled. Verify no action taken.
         self.start_subtest("GCS failsafe disabled test: FS_GCS_ENABLE=0 should take no failsafe action")
         self.setGCSfailsafe(0)
@@ -704,7 +756,7 @@ class AutoTestCopter(AutoTest):
         self.start_subtest("GCS failsafe RTL with no options test: FS_GCS_ENABLE=1 & FS_OPTIONS=0")
         self.set_heartbeat_rate(0)
         self.wait_mode("RTL")
-        self.wait_disarmed()
+        self.wait_rtl_complete()
         self.set_heartbeat_rate(self.speedup)
         self.mavproxy.expect("GCS Failsafe Cleared")
         self.end_subtest("Completed GCS failsafe RTL with no options test")
@@ -715,7 +767,7 @@ class AutoTestCopter(AutoTest):
         self.takeoffAndMoveAway()
         self.set_heartbeat_rate(0)
         self.wait_mode("LAND")
-        self.wait_disarmed()
+        self.wait_landed_and_disarmed()
         self.set_heartbeat_rate(self.speedup)
         self.mavproxy.expect("GCS Failsafe Cleared")
         self.end_subtest("Completed GCS failsafe land with no options test")
@@ -748,7 +800,7 @@ class AutoTestCopter(AutoTest):
         self.takeoffAndMoveAway()
         self.set_heartbeat_rate(0)
         self.wait_mode("RTL")
-        self.wait_disarmed()
+        self.wait_rtl_complete()
         self.set_heartbeat_rate(self.speedup)
         self.mavproxy.expect("GCS Failsafe Cleared")
         self.end_subtest("Completed GCS failsafe invalid value with no options test")
@@ -788,7 +840,7 @@ class AutoTestCopter(AutoTest):
         self.mavproxy.expect("GCS Failsafe - Continuing Landing")
         self.delay_sim_time(5)
         self.wait_mode("LAND")
-        self.wait_disarmed()
+        self.wait_landed_and_disarmed()
         self.set_heartbeat_rate(self.speedup)
         self.mavproxy.expect("GCS Failsafe Cleared")
         self.end_subtest("Completed GCS failsafe with option bits")
@@ -838,7 +890,7 @@ class AutoTestCopter(AutoTest):
         self.delay_sim_time(5)
         self.wait_mode("ALT_HOLD")
         self.change_mode("RTL")
-        self.wait_disarmed()
+        self.wait_rtl_complete()
         self.set_parameter('SIM_BATT_VOLTAGE', 12.5)
         self.reboot_sitl_mavproxy()
         self.end_subtest("Completed Batt failsafe disabled test")
@@ -858,7 +910,7 @@ class AutoTestCopter(AutoTest):
         self.mavproxy.expect("Battery 1 is critical")
         self.delay_sim_time(5)
         self.wait_mode("LAND")
-        self.wait_disarmed()
+        self.wait_landed_and_disarmed()
         self.set_parameter('SIM_BATT_VOLTAGE', 12.5)
         self.reboot_sitl_mavproxy()
         self.end_subtest("Completed two stage battery failsafe test with RTL and Land")
@@ -894,7 +946,7 @@ class AutoTestCopter(AutoTest):
         self.mavproxy.expect("Battery 1 is low")
         self.delay_sim_time(5)
         self.wait_mode("LAND")
-        self.wait_disarmed()
+        self.wait_landed_and_disarmed()
         self.set_parameter('SIM_BATT_VOLTAGE', 12.5)
         self.reboot_sitl_mavproxy()
         self.end_subtest("Completed battery failsafe with FS_OPTIONS set to continue landing")
@@ -914,7 +966,7 @@ class AutoTestCopter(AutoTest):
         self.set_parameter("SIM_RC_FAIL", 1)
         self.delay_sim_time(10)
         self.wait_mode("LAND")
-        self.wait_disarmed()
+        self.wait_landed_and_disarmed()
         self.set_parameter('SIM_BATT_VOLTAGE', 12.5)
         self.set_parameter("SIM_RC_FAIL", 0)
         self.reboot_sitl_mavproxy()
@@ -1190,8 +1242,7 @@ class AutoTestCopter(AutoTest):
                 # reduce throttle
                 self.zero_throttle()
                 self.change_mode("LAND")
-                self.progress("Waiting for disarm")
-                self.wait_disarmed()
+                self.wait_landed_and_disarmed()
                 self.progress("Reached home OK")
                 self.zero_throttle()
                 return
@@ -1233,8 +1284,7 @@ class AutoTestCopter(AutoTest):
         # wait for fence to trigger
         self.wait_mode('RTL', timeout=120)
 
-        self.progress("Waiting for disarm")
-        self.wait_disarmed()
+        self.wait_rtl_complete()
 
         self.zero_throttle()
 
@@ -1572,6 +1622,50 @@ class AutoTestCopter(AutoTest):
 
         self.do_RTL()
 
+    # test_mag_fail - test failover of compass in EKF
+    def test_mag_fail(self):
+        # we want both EK2 and EK3
+        self.set_parameter("EK2_ENABLE", 1)
+        self.set_parameter("EK3_ENABLE", 1)
+
+        self.takeoff(10, mode="LOITER")
+
+        self.mavproxy.send('mode CIRCLE\n')
+        self.wait_mode('CIRCLE')
+
+        self.delay_sim_time(20)
+
+        self.progress("Failing first compass")
+        self.set_parameter("SIM_MAG1_FAIL", 1)
+
+        # we want for the message twice, one for EK2 and again for EK3
+        self.wait_statustext("IMU0 switching to compass 1")
+        self.wait_statustext("IMU0 switching to compass 1")
+        self.progress("compass switch 1 OK")
+
+        self.delay_sim_time(2)
+
+        self.progress("Failing 2nd compass")
+        self.set_parameter("SIM_MAG2_FAIL", 1)
+
+        self.wait_statustext("IMU0 switching to compass 2")
+        self.wait_statustext("IMU0 switching to compass 2")
+
+        self.progress("compass switch 2 OK")
+
+        self.delay_sim_time(2)
+
+        self.progress("Failing 3rd compass")
+        self.set_parameter("SIM_MAG3_FAIL", 1)
+        self.delay_sim_time(2)
+        self.set_parameter("SIM_MAG1_FAIL", 0)
+
+        self.wait_statustext("IMU0 switching to compass 0")
+        self.wait_statustext("IMU0 switching to compass 0")
+        self.progress("compass switch 0 OK")
+
+        self.do_RTL()
+        
     def wait_attitude(self, desroll=None, despitch=None, timeout=2, tolerance=10):
         '''wait for an attitude (degrees)'''
         if desroll is None and despitch is None:
@@ -1628,8 +1722,7 @@ class AutoTestCopter(AutoTest):
             self.set_rc(2, 1500) # can't change quickly enough!
             self.wait_attitude(despitch=0, desroll=0, tolerance=5)
             self.set_parameter('SIM_SPEEDUP', old_speedup)
-            self.change_mode('RTL')
-            self.wait_disarmed()
+            self.do_RTL()
         except Exception as e:
             ex = e
         self.set_message_rate_hz(mavutil.mavlink.MAVLINK_MSG_ID_ATTITUDE, 0)
@@ -1718,7 +1811,7 @@ class AutoTestCopter(AutoTest):
                 self.progress("AUTOTUNE OK (%u seconds)" % (now - tstart))
                 # near enough for now:
                 self.change_mode('LAND')
-                self.wait_disarmed()
+                self.wait_landed_and_disarmed()
                 # check the original gains have been re-instated
                 if (rlld != self.get_parameter("ATC_RAT_RLL_D")
                     or rlli != self.get_parameter("ATC_RAT_RLL_I")
@@ -2151,8 +2244,7 @@ class AutoTestCopter(AutoTest):
         self.wait_groundspeed(0-tolerance, 0+tolerance)
         self.wait_groundspeed(wpnav_speed_ms-tolerance, wpnav_speed_ms+tolerance)
         self.monitor_groundspeed(wpnav_speed_ms, timeout=5)
-        self.change_mode('RTL')
-        self.wait_disarmed()
+        self.do_RTL()
 
     def fly_nav_delay(self):
         """Fly a simple mission that has a delay in it."""
@@ -2204,14 +2296,11 @@ class AutoTestCopter(AutoTest):
     def test_rangefinder(self):
         ex = None
         self.context_push()
+
         self.progress("Making sure we don't ordinarily get RANGEFINDER")
-        try:
-            m = self.mav.recv_match(type='RANGEFINDER',
-                                    blocking=True,
-                                    timeout=5)
-        except Exception as e:
-            self.progress("Caught exception: %s" %
-                          self.get_exception_stacktrace(e))
+        m = self.mav.recv_match(type='RANGEFINDER',
+                                blocking=True,
+                                timeout=5)
 
         if m is not None:
             raise NotAchievedException("Received unexpected RANGEFINDER msg")
@@ -2219,6 +2308,7 @@ class AutoTestCopter(AutoTest):
         # may need to force a rotation if some other test has used the
         # rangefinder...
         self.progress("Ensure no RFND messages in log")
+        self.set_parameter("LOG_DISARMED", 1)
         if self.current_onboard_log_contains_message("RFND"):
             raise NotAchievedException("Found unexpected RFND message")
 
@@ -2377,22 +2467,7 @@ class AutoTestCopter(AutoTest):
             self.set_rc(2, 1500)
             self.wait_altitude(14, 15, relative=True)
 
-            tstart = self.get_sim_time()
-            while self.get_sim_time_cached() < tstart + 200:
-                m = self.mav.recv_match(type='GLOBAL_POSITION_INT', blocking=True)
-                alt = m.relative_alt / 1000.0 # mm -> m
-                home_distance = self.distance_to_home(use_cached_home=True)
-                home = ""
-                if alt <= 1:
-                    home = "HOME"
-                self.progress("Alt: %.02f  HomeDist: %.02f %s" %
-                          (alt, home_distance, home))
-                # our post-condition is that we are disarmed:
-                if not self.armed():
-                    break
-
-            if home == "":
-                raise NotAchievedException("Did not get home and disarm")
+            self.wait_rtl_complete()
 
         except Exception as e:
             self.progress("Exception caught: %s" % (
@@ -2490,12 +2565,12 @@ class AutoTestCopter(AutoTest):
                      2, # start motor
                      mavutil.mavlink.MOTOR_TEST_THROTTLE_PWM,
                      pwm_in, # pwm-to-output
-                     1, # timeout in seconds
+                     2, # timeout in seconds
                      2, # number of motors to output
                      0, # compass learning
                      0,
                      timeout=timeout)
-        # long timeouts here because they're a pause before we start motors
+        # long timeouts here because there's a pause before we start motors
         self.wait_servo_channel_value(1, pwm_in, timeout=10)
         self.wait_servo_channel_value(4, pwm_in, timeout=10)
         self.wait_statustext("finished motor test")
@@ -2503,19 +2578,19 @@ class AutoTestCopter(AutoTest):
 
         self.start_subtest("Testing percentage output")
         percentage = 90.1
+        # since MOT_SPIN_MIN and MOT_SPIN_MAX are not set, the RC3
+        # min/max are used.
+        expected_pwm = 1000 + (self.get_parameter("RC3_MAX") - self.get_parameter("RC3_MIN")) * percentage/100.0
+        self.progress("expected pwm=%f" % expected_pwm)
         self.run_cmd(mavutil.mavlink.MAV_CMD_DO_MOTOR_TEST,
                      2, # start motor
                      mavutil.mavlink.MOTOR_TEST_THROTTLE_PERCENT,
                      percentage, # pwm-to-output
-                     1, # timeout in seconds
+                     2, # timeout in seconds
                      2, # number of motors to output
                      0, # compass learning
                      0,
                      timeout=timeout)
-        # since MOT_SPIN_MIN and MOT_SPIN_MAX are not set, the RC3
-        # min/max are used.
-        expected_pwm = 1000 + (self.get_parameter("RC3_MAX") - self.get_parameter("RC3_MIN")) * percentage/100.0
-        self.progress("expected pwm=%f\n" % expected_pwm)
         self.wait_servo_channel_value(1, expected_pwm, timeout=10)
         self.wait_servo_channel_value(4, expected_pwm, timeout=10)
         self.wait_statustext("finished motor test")
@@ -2529,7 +2604,6 @@ class AutoTestCopter(AutoTest):
         ex = None
         try:
             self.set_parameter("PLND_ENABLED", 1)
-            self.fetch_parameters()
             self.set_parameter("PLND_TYPE", 4)
 
             self.set_analog_rangefinder_parameters()
@@ -2553,7 +2627,7 @@ class AutoTestCopter(AutoTest):
             self.zero_throttle()
             self.takeoff(10, 1800)
             self.change_mode("LAND")
-            self.wait_disarmed()
+            self.wait_landed_and_disarmed()
             self.mav.recv_match(type='GLOBAL_POSITION_INT', blocking=True)
             new_pos = self.mav.location()
             delta = self.get_distance(target, new_pos)
@@ -3874,7 +3948,7 @@ class AutoTestCopter(AutoTest):
         max_good_tdelta = 15
         tdelta = self.get_sim_time() - tstart
         self.progress("Vehicle in RTL")
-        self.wait_disarmed()
+        self.wait_rtl_complete()
         self.progress("Vehicle disarmed")
         if tdelta > max_good_tdelta:
             raise NotAchievedException("Took too long to enter RTL: %fs > %fs" %
@@ -4386,7 +4460,7 @@ class AutoTestCopter(AutoTest):
         self.fly_guided_move_to(low_position, timeout=240)
         self.change_mode('LAND')
         # expecting home to change when disarmed
-        self.wait_disarmed()
+        self.wait_landed_and_disarmed()
         # wait a while for home to move (it shouldn't):
         self.delay_sim_time(10)
         m = self.mav.recv_match(type='GLOBAL_POSITION_INT', blocking=True)
@@ -4435,7 +4509,6 @@ class AutoTestCopter(AutoTest):
         ex = None
         try:
             self.set_parameter("PLND_ENABLED", 1)
-            self.fetch_parameters()
             # enable companion backend:
             self.set_parameter("PLND_TYPE", 1)
 
@@ -4569,9 +4642,7 @@ class AutoTestCopter(AutoTest):
         except Exception as e:
             ex = e
 
-        self.mavproxy.send('mode LAND\n')
-        self.wait_mode('LAND')
-        self.wait_disarmed()
+        self.land_and_disarm()
         self.set_rc(8, 1000)
 
         self.context_pop()
@@ -5187,7 +5258,7 @@ class AutoTestCopter(AutoTest):
         ex = None
         try:
             self.set_parameter("EK2_ALT_SOURCE", 2)
-            self.wait_gps_disable()
+            self.wait_gps_disable(position_vertical=True)
             self.change_mode("ALT_HOLD")
             self.assert_prearm_failure("Need Alt Estimate")
             self.change_mode("STABILIZE")
@@ -5333,6 +5404,10 @@ class AutoTestCopter(AutoTest):
             ("ModeCircle",
              "Fly CIRCLE mode",
              self.fly_circle),
+
+            ("MagFail",
+             "Test magnetometer failure",
+             self.test_mag_fail),
 
             ("OpticalFlowLimits",
              "Fly Optical Flow limits",
@@ -5486,6 +5561,14 @@ class AutoTestCopter(AutoTest):
              "Test that Alt Estimation is mandatory for ALT_HOLD",
              self.test_alt_estimate_prearm),
 
+            ("DataFlash",
+             "Test DataFlash Block backend",
+             self.test_dataflash_sitl),
+
+            ("DataFlashErase",
+             "Test DataFlash Block backend erase",
+             self.test_dataflash_erase),
+
             ("LogUpload",
              "Log upload",
              self.log_upload),
@@ -5502,6 +5585,8 @@ class AutoTestCopter(AutoTest):
         return {
             "Parachute": "See https://github.com/ArduPilot/ardupilot/issues/4702",
             "HorizontalAvoidFence": "See https://github.com/ArduPilot/ardupilot/issues/11525",
+            "AltEstimation": "See https://github.com/ArduPilot/ardupilot/issues/15191",
+            "Button": "See https://github.com/ArduPilot/ardupilot/issues/15259",
         }
 
 class AutoTestHeli(AutoTestCopter):
@@ -5569,9 +5654,7 @@ class AutoTestHeli(AutoTestCopter):
         self.progress("Runup time %u" % runup_time)
         self.zero_throttle()
         self.set_rc(8, 1000)
-        self.mavproxy.send('mode LAND\n')
-        self.wait_mode('LAND')
-        self.mav.motors_disarmed_wait()
+        self.land_and_disarm()
         self.mav.wait_heartbeat()
 
     # fly_avc_test - fly AVC mission
@@ -5669,9 +5752,7 @@ class AutoTestHeli(AutoTestCopter):
         except Exception as e:
             ex = e
 
-        self.mavproxy.send('mode LAND\n')
-        self.wait_mode('LAND')
-        self.wait_disarmed()
+        self.land_and_disarm()
         self.set_rc(8, 1000)
 
         self.context_pop()
@@ -5710,9 +5791,7 @@ class AutoTestHeli(AutoTestCopter):
         except Exception as e:
             ex = e
 
-        self.mavproxy.send('mode LAND\n')
-        self.wait_mode('LAND')
-        self.wait_disarmed()
+        self.land_and_disarm()
         self.set_rc(8, 1000)
 
         self.context_pop()

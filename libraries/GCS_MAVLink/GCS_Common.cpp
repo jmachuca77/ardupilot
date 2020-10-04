@@ -46,6 +46,7 @@
 #include <AP_Proximity/AP_Proximity.h>
 #include <AP_Scripting/AP_Scripting.h>
 #include <AP_Winch/AP_Winch.h>
+#include <AP_OSD/AP_OSD.h>
 
 #include <stdio.h>
 
@@ -1856,7 +1857,7 @@ void GCS::send_textv(MAV_SEVERITY severity, const char *fmt, va_list arg_list, u
         // send_text can be called from multiple threads; we must
         // protect the "text" member with _statustext_sem
         hal.util->vsnprintf(statustext_printf_buffer, sizeof(statustext_printf_buffer), fmt, arg_list);
-        memcpy(first_piece_of_text, statustext_printf_buffer, ARRAY_SIZE(first_piece_of_text));
+        memcpy(first_piece_of_text, statustext_printf_buffer, ARRAY_SIZE(first_piece_of_text)-1);
 
         // filter destination ports to only allow active ports.
         statustext_t statustext{};
@@ -2171,7 +2172,7 @@ MAV_RESULT GCS_MAVLINK::_set_mode_common(const MAV_MODE _base_mode, const uint32
 {
     MAV_RESULT result = MAV_RESULT_UNSUPPORTED;
     // only accept custom modes because there is no easy mapping from Mavlink flight modes to AC flight modes
-    if (_base_mode & MAV_MODE_FLAG_CUSTOM_MODE_ENABLED) {
+    if (uint32_t(_base_mode) & MAV_MODE_FLAG_CUSTOM_MODE_ENABLED) {
         if (AP::vehicle()->set_mode(_custom_mode, ModeReason::GCS_COMMAND)) {
             result = MAV_RESULT_ACCEPTED;
         }
@@ -2291,7 +2292,7 @@ void GCS_MAVLINK::send_local_position() const
     const AP_AHRS &ahrs = AP::ahrs();
 
     Vector3f local_position, velocity;
-    if (!ahrs.get_relative_position_NED_home(local_position) ||
+    if (!ahrs.get_relative_position_NED_origin(local_position) ||
         !ahrs.get_velocity_NED(velocity)) {
         // we don't know the position and velocity
         return;
@@ -2630,17 +2631,6 @@ void GCS_MAVLINK::send_vfr_hud()
         vfr_hud_climbrate());
 }
 
-void GCS_MAVLINK::zero_rc_outputs()
-{
-    // Send an invalid signal to the motors to prevent spinning due to neutral (1500) pwm pulse being cut short
-    // For that matter, send an invalid signal to all channels to prevent undesired/unexpected behavior
-    SRV_Channels::cork();
-    for (int i=0; i<NUM_RC_CHANNELS; i++) {
-        hal.rcout->write(i, 0);
-    }
-    SRV_Channels::push();
-}
-
 /*
   handle a MAV_CMD_PREFLIGHT_REBOOT_SHUTDOWN command 
 
@@ -2689,34 +2679,13 @@ MAV_RESULT GCS_MAVLINK::handle_preflight_reboot(const mavlink_command_long_t &pa
         return MAV_RESULT_UNSUPPORTED;
     }
 
-    if (should_zero_rc_outputs_on_reboot()) {
-        zero_rc_outputs();
-    }
-
     // send ack before we reboot
     mavlink_msg_command_ack_send(chan, packet.command, MAV_RESULT_ACCEPTED);
-    // Notify might want to blink some LEDs:
-    AP_Notify *notify = AP_Notify::get_singleton();
-    if (notify) {
-        AP_Notify::flags.firmware_update = 1;
-        notify->update();
-    }
-    // force safety on
-    hal.rcout->force_safety_on();
-
-    // flush pending parameter writes
-    AP_Param::flush();
-
-    // do not process incoming mavlink messages while we delay:
-    hal.scheduler->register_delay_callback(nullptr, 5);
-
-    // delay to give the ACK a chance to get out, the LEDs to flash,
-    // the IO board safety to be forced on, the parameters to flush, ...
-    hal.scheduler->delay(200);
 
     // when packet.param1 == 3 we reboot to hold in bootloader
     const bool hold_in_bootloader = is_equal(packet.param1, 3.0f);
-    hal.scheduler->reboot(hold_in_bootloader);
+
+    AP::vehicle()->reboot(hold_in_bootloader);  // not expected to return
 
     return MAV_RESULT_FAILED;
 }
@@ -3199,6 +3168,16 @@ void GCS_MAVLINK::handle_obstacle_distance(const mavlink_message_t &msg)
     }
 }
 
+void GCS_MAVLINK::handle_osd_param_config(const mavlink_message_t &msg)
+{
+#if OSD_ENABLED
+    AP_OSD *osd = AP::osd();
+    if (osd != nullptr) {
+        osd->handle_msg(msg, *this);
+    }
+#endif
+}
+
 /*
   handle messages which don't require vehicle specific data
  */
@@ -3385,6 +3364,10 @@ void GCS_MAVLINK::handle_common_message(const mavlink_message_t &msg)
         handle_obstacle_distance(msg);
         break;
 
+    case MAVLINK_MSG_ID_OSD_PARAM_CONFIG:
+    case MAVLINK_MSG_ID_OSD_PARAM_SHOW_CONFIG:
+        handle_osd_param_config(msg);
+        break;
     }
 
 }

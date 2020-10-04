@@ -116,7 +116,7 @@ static void simulation_timeval(struct timeval *tv)
     static struct timeval first_tv;
     if (first_usec == 0) {
         first_usec = now;
-        gettimeofday(&first_tv, nullptr);
+        first_tv.tv_sec = AP::sitl()->start_time_UTC;
     }
     *tv = first_tv;
     tv->tv_sec += now / 1000000ULL;
@@ -1249,10 +1249,11 @@ void SITL_State::_update_gps(double latitude, double longitude, float altitude,
         // add an altitude error controlled by a slow sine wave
         d.altitude = altitude + _sitl->gps_noise[idx] * sinf(AP_HAL::millis() * 0.0005f) + _sitl->gps_alt_offset[idx];
 
-        // Add offet to c.g. velocity to get velocity at antenna
-        d.speedN = speedN;
-        d.speedE = speedE;
-        d.speedD = speedD;
+        // Add offet to c.g. velocity to get velocity at antenna and add simulated error
+        Vector3f velErrorNED = _sitl->gps_vel_err[idx];
+        d.speedN = speedN + (velErrorNED.x * rand_float());
+        d.speedE = speedE + (velErrorNED.y * rand_float()); 
+        d.speedD = speedD + (velErrorNED.z * rand_float());
         d.have_lock = have_lock;
 
         if (_sitl->gps_drift_alt[idx] > 0) {

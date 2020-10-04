@@ -8,16 +8,9 @@ void Plane::Log_Write_Attitude(void)
     Vector3f targets;       // Package up the targets into a vector for commonality with Copter usage of Log_Wrote_Attitude
     targets.x = nav_roll_cd;
     targets.y = nav_pitch_cd;
+    targets.z = 0; //Plane does not have the concept of navyaw. This is a placeholder.
 
-    if (quadplane.in_vtol_mode() || quadplane.in_assisted_flight()) {
-        // when VTOL active log the copter target yaw
-        targets.z = wrap_360_cd(quadplane.attitude_control->get_att_target_euler_cd().z);
-    } else {
-        //Plane does not have the concept of navyaw. This is a placeholder.
-        targets.z = 0;
-    }
-
-    if (quadplane.tailsitter_active() || quadplane.in_vtol_mode()) {
+    if (quadplane.show_vtol_view()) {
         // we need the attitude targets from the AC_AttitudeControl controller, as they
         // account for the acceleration limits.
         // Also, for bodyframe roll input types, _attitude_target_euler_angle is not maintained
@@ -227,6 +220,7 @@ struct PACKED log_AETR {
     int16_t throttle;
     int16_t rudder;
     int16_t flap;
+    float speed_scaler;
 };
 
 void Plane::Log_Write_AETR()
@@ -239,6 +233,7 @@ void Plane::Log_Write_AETR()
         ,throttle : SRV_Channels::get_output_scaled(SRV_Channel::k_throttle)
         ,rudder   : SRV_Channels::get_output_scaled(SRV_Channel::k_rudder)
         ,flap     : SRV_Channels::get_output_scaled(SRV_Channel::k_flap_auto)
+        ,speed_scaler : get_speed_scaler(),
         };
 
     logger.WriteBlock(&pkt, sizeof(pkt));
@@ -373,8 +368,9 @@ const struct LogStructure Plane::log_structure[] = {
 // @Field: CRt: climb rate
 // @Field: TMix: transition throttle mix value
 // @Field: Sscl: speed scalar for tailsitter control surfaces
+// @Field: Trans: Transistion state
     { LOG_QTUN_MSG, sizeof(QuadPlane::log_QControl_Tuning),
-      "QTUN", "Qffffffeccff", "TimeUS,ThI,ABst,ThO,ThH,DAlt,Alt,BAlt,DCRt,CRt,TMix,Sscl", "s----mmmnn--", "F----00000-0" },
+      "QTUN", "QffffffeccffB", "TimeUS,ThI,ABst,ThO,ThH,DAlt,Alt,BAlt,DCRt,CRt,TMix,Sscl,Trans", "s----mmmnn---", "F----00000-0-" },
 
 // @LoggerMessage: AOA
 // @Description: Angle of attack and Side Slip Angle values
@@ -426,8 +422,9 @@ const struct LogStructure Plane::log_structure[] = {
 // @Field: Thr: Pre-mixer value for throttle output (between -4500 to 4500)
 // @Field: Rudd: Pre-mixer value for rudder output (between -4500 to 4500)
 // @Field: Flap: Pre-mixer value for flaps output (between -4500 to 4500)
+// @Field: SS: Surface movement / airspeed scaling value
     { LOG_AETR_MSG, sizeof(log_AETR),
-      "AETR", "Qhhhhh",  "TimeUS,Ail,Elev,Thr,Rudd,Flap", "s-----", "F-----" },
+      "AETR", "Qhhhhhf",  "TimeUS,Ail,Elev,Thr,Rudd,Flap,SS", "s------", "F------" },
 
 // @LoggerMessage: OFG
 // @Description: OFfboard-Guided - an advanced version of GUIDED for companion computers that includes rate/s.  
