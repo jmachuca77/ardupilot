@@ -645,7 +645,7 @@ bool Mode::apply_stick_mixing_override()
             _reached_destination = false;
             _desired_yaw_cd = _stick_mixing.yaw_cd;
             _desired_speed = _stick_mixing.initial_speed;
-            calc_steering_from_turn_rate(ToRad(override_delta_cd*0.01f), _desired_speed, 0);
+            calc_steering_from_turn_rate(ToRad(override_delta_cd*0.01f));
             //Mode::calc_steering_to_heading(_desired_yaw_cd);
             return true;
         }
