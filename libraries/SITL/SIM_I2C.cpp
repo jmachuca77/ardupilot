@@ -21,6 +21,7 @@
 #include <SITL/SITL.h>
 
 #include "SIM_I2C.h"
+#include "SIM_SN_GCJA5.h"
 #include "SIM_ToshibaLED.h"
 #include "SIM_MaxSonarI2CXL.h"
 #include "SIM_BattMonitor_SMBus_Maxell.h"
@@ -43,6 +44,7 @@ public:
 };
 static IgnoredI2CDevice ignored;
 
+static SN_GCJA5 sn_gcja5;
 static ToshibaLED toshibaled;
 static MaxSonarI2CXL maxsonari2cxl;
 static Maxell maxell;
@@ -53,6 +55,7 @@ struct i2c_device_at_address {
     uint8_t addr;
     I2CDevice &device;
 } i2c_devices[] {
+    { 1, 0x33, sn_gcja5 },  // SN-GCJA5 particle matter sensor
     { 1, 0x55, toshibaled },
     { 1, 0x38, ignored }, // NCP5623
     { 1, 0x39, ignored }, // NCP5623C
