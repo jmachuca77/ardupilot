@@ -4,6 +4,8 @@
 #include <utility>
 #include <AP_HAL/I2CDevice.h>
 #include <GCS_MAVLink/GCS.h>
+#include <AP_Common/Location.h>
+#include <AP_Vehicle/AP_Vehicle.h>        
 
 extern const AP_HAL::HAL& hal;
 
@@ -91,9 +93,13 @@ void AP_PM_SNGCJA5::read_frames(void)
     int     PC7_5  = (ALL_REGS[20] | ALL_REGS[21] << 8);
     int     PC10_0 = (ALL_REGS[22] | ALL_REGS[23] << 8);
 
+    // get current location from EKF
+    Location current_loc;
+    AP::ahrs_navekf().get_location(current_loc);
+
     gcs().send_text(MAV_SEVERITY_INFO,"PS Status: %u", (unsigned)val[0]);
-    gcs().send_text(MAV_SEVERITY_INFO,"PS PM1.0: %lf, PM2.5: %lf, PM10.0: %lf", PM1_0, PM2_5, PM10_0);
-    gcs().send_text(MAV_SEVERITY_INFO,"PS PC0.5: %d, PC1.0: %d, PC2.5: %d, PC5.0: %d, PC7.5: %d, PC10.0: %d", PC0_5, PC1_0, PC2_5, PC5_0, PC7_5, PC10_0);
+    gcs().send_text(MAV_SEVERITY_INFO,"PS Lat: %ld, Lon: %ld, PC0.5: %d, PC1.0: %d, PC2.5: %d, PC5.0: %d, PC7.5: %d, PC10.0: %d", current_loc.lat, current_loc.lng, PC0_5, PC1_0, PC2_5, PC5_0, PC7_5, PC10_0);
+    gcs().send_text(MAV_SEVERITY_INFO,"PS PM1.0: %0.0lf, PM2.5: %0.0lf, PM10.0: %0.0lf", PM1_0, PM2_5, PM10_0);
 }
 
 // periodically called from vehicle code
