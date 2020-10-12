@@ -77,63 +77,23 @@ void AP_PM_SNGCJA5::read_frames(void)
         return;
     }
 
-    uint8_t PM1_0[4];
-    if (!dev->read_registers(SNGCJA5_PM1_0_LL, PM1_0, sizeof(PM1_0))) {
+    uint8_t ALL_REGS[24];
+    if (!dev->read_registers(SNGCJA5_PM1_0_LL, ALL_REGS, sizeof(ALL_REGS))) {
         return;
     }
-    double fPM1_0 = (PM1_0[0] | PM1_0[1] << 8 | PM1_0[2] << 16 | PM1_0[3] << 24);
-
-    uint8_t PM2_5[4];
-    if (!dev->read_registers(SNGCJA5_PM2_5_LL, PM2_5, sizeof(PM2_5))) {
-        return;
-    }
-    double fPM2_5 = (PM2_5[0] | PM2_5[1] << 8 | PM2_5[2] << 16 | PM2_5[3] << 24);
-
-    uint8_t PM10_0[4];
-    if (!dev->read_registers(SNGCJA5_PM10_0_LL, PM10_0, sizeof(PM10_0))) {
-        return;
-    }
-    double fPM10_0 = (PM10_0[0] | PM10_0[1] << 8 | PM10_0[2] << 16 | PM10_0[3] << 24);
-
-    uint8_t PC0_5[2];
-    if (!dev->read_registers(SNGCJA5_PC_0_5_L, PC0_5, sizeof(PC0_5))) {
-        return;
-    }
-    int fPC0_5 = (PC0_5[0] | PC0_5[1] << 8);
-
-    uint8_t PC1_0[2];
-    if (!dev->read_registers(SNGCJA5_PC_1_0_L, PC1_0, sizeof(PC1_0))) {
-        return;
-    }
-    int fPC1_0 = (PC1_0[0] | PC1_0[1] << 8);
-
-    uint8_t PC2_5[2];
-    if (!dev->read_registers(SNGCJA5_PC_2_5_L, PC2_5, sizeof(PC2_5))) {
-        return;
-    }
-    int fPC2_5 = (PC2_5[0] | PC2_5[1] << 8);
-
-    uint8_t PC5_0[2];
-    if (!dev->read_registers(SNGCJA5_PC_5_0_L, PC5_0, sizeof(PC5_0))) {
-        return;
-    }
-    int fPC5_0 = (PC5_0[0] | PC5_0[1] << 8);
-
-    uint8_t PC7_5[2];
-    if (!dev->read_registers(SNGCJA5_PC_7_5_L, PC7_5, sizeof(PC7_5))) {
-        return;
-    }
-    int fPC7_5 = (PC7_5[0] | PC7_5[1] << 8);
-
-    uint8_t PC10_0[2];
-    if (!dev->read_registers(SNGCJA5_PC_10_0_L, PC10_0, sizeof(PC10_0))) {
-        return;
-    }
-    int fPC10_0 = (PC10_0[0] | PC10_0[1] << 8);
+    double  PM1_0  = (ALL_REGS[0] | ALL_REGS[1] << 8 | ALL_REGS[2] << 16 | ALL_REGS[3] << 24);
+    double  PM2_5  = (ALL_REGS[4] | ALL_REGS[5] << 8 | ALL_REGS[6] << 16 | ALL_REGS[7] << 24);
+    double  PM10_0 = (ALL_REGS[8] | ALL_REGS[9] << 8 | ALL_REGS[10] << 16 | ALL_REGS[11] << 24);
+    int     PC0_5  = (ALL_REGS[12] | ALL_REGS[13] << 8);
+    int     PC1_0  = (ALL_REGS[14] | ALL_REGS[15] << 8);
+    int     PC2_5  = (ALL_REGS[16] | ALL_REGS[17] << 8);
+    int     PC5_0  = (ALL_REGS[18] | ALL_REGS[19] << 8);
+    int     PC7_5  = (ALL_REGS[20] | ALL_REGS[21] << 8);
+    int     PC10_0 = (ALL_REGS[22] | ALL_REGS[23] << 8);
 
     gcs().send_text(MAV_SEVERITY_INFO,"PS Status: %u", (unsigned)val[0]);
-    gcs().send_text(MAV_SEVERITY_INFO,"PS PM1.0: %lf, PM2.5: %lf, PM10.0: %lf", fPM1_0, fPM2_5, fPM10_0);
-    gcs().send_text(MAV_SEVERITY_INFO,"PS PC0.5: %d, PC1.0: %d, PC2.5: %d, PC5.0: %d, PC7.5: %d, PC10.0: %d", fPC0_5, fPC1_0, fPC2_5, fPC5_0, fPC7_5, fPC10_0);
+    gcs().send_text(MAV_SEVERITY_INFO,"PS PM1.0: %lf, PM2.5: %lf, PM10.0: %lf", PM1_0, PM2_5, PM10_0);
+    gcs().send_text(MAV_SEVERITY_INFO,"PS PC0.5: %d, PC1.0: %d, PC2.5: %d, PC5.0: %d, PC7.5: %d, PC10.0: %d", PC0_5, PC1_0, PC2_5, PC5_0, PC7_5, PC10_0);
 }
 
 // periodically called from vehicle code
