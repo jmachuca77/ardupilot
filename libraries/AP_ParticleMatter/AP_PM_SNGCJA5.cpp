@@ -5,7 +5,8 @@
 #include <AP_HAL/I2CDevice.h>
 #include <GCS_MAVLink/GCS.h>
 #include <AP_Common/Location.h>
-#include <AP_Vehicle/AP_Vehicle.h>        
+#include <AP_Vehicle/AP_Vehicle.h>      
+#include <AP_Logger/AP_Logger.h>  
 
 extern const AP_HAL::HAL& hal;
 
@@ -97,9 +98,34 @@ void AP_PM_SNGCJA5::read_frames(void)
     Location current_loc;
     AP::ahrs_navekf().get_location(current_loc);
 
-    gcs().send_text(MAV_SEVERITY_INFO,"PS Status: %u", (unsigned)val[0]);
-    gcs().send_text(MAV_SEVERITY_INFO,"PS Lat: %ld, Lon: %ld, PC0.5: %d, PC1.0: %d, PC2.5: %d, PC5.0: %d, PC7.5: %d, PC10.0: %d", current_loc.lat, current_loc.lng, PC0_5, PC1_0, PC2_5, PC5_0, PC7_5, PC10_0);
-    gcs().send_text(MAV_SEVERITY_INFO,"PS PM1.0: %0.0lf, PM2.5: %0.0lf, PM10.0: %0.0lf", PM1_0, PM2_5, PM10_0);
+    AP::logger().Write("PM1", "TimeUS,lat,lon,alt,Status,PM1_0,PM2_5,PM10_0", "QLLfIfff",
+                                            AP_HAL::micros64(),
+                                            current_loc.lat,
+                                            current_loc.lng,
+                                            (double)current_loc.alt*1.0e-2f,
+                                            val[0],
+                                            (double)PM1_0,
+                                            (double)PM2_5,
+                                            (double)PM10_0
+                                            );
+                                        
+    AP::logger().Write("PM2", "TimeUS,lat,lon,alt,PC0_5,PC1_0,PC2_5,PC5_0,PC7_5,PC10_0", "QLLfIIIIII",
+                                            AP_HAL::micros64(),
+                                            current_loc.lat,
+                                            current_loc.lng,
+                                            (double)current_loc.alt*1.0e-2f,
+                                            PC0_5,
+                                            PC1_0,
+                                            PC2_5,
+                                            PC5_0,
+                                            PC7_5,
+                                            PC10_0
+                                            );
+                                            
+
+    // gcs().send_text(MAV_SEVERITY_INFO,"PS Status: %u", (unsigned)val[0]);
+    // gcs().send_text(MAV_SEVERITY_INFO,"PS Lat: %d, Lon: %d, PC0.5: %d, PC1.0: %d, PC2.5: %d, PC5.0: %d, PC7.5: %d, PC10.0: %d", current_loc.lat, current_loc.lng, PC0_5, PC1_0, PC2_5, PC5_0, PC7_5, PC10_0);
+    // gcs().send_text(MAV_SEVERITY_INFO,"PS PM1.0: %0.0lf, PM2.5: %0.0lf, PM10.0: %0.0lf", PM1_0, PM2_5, PM10_0);
 }
 
 // periodically called from vehicle code
