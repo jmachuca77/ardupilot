@@ -307,8 +307,14 @@ void Plane::calculate_forces(const struct sitl_input &input, Vector3f &rot_accel
         throttle = filtered_servo_range(input, 2);
     }
     
-    float thrust = throttle;
-    icengine->update(input, thrust);
+    float thrust     = throttle;
+
+    battery_voltage = sitl->batt_voltage - 0.7*throttle;
+    battery_current = 50.0f*throttle;
+
+    if (ice_engine) {
+        thrust = icengine.update(input);
+    }
 
     // calculate angle of attack
     angle_of_attack = atan2f(velocity_air_bf.z, velocity_air_bf.x);
