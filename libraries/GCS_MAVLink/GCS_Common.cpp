@@ -612,6 +612,20 @@ void GCS_MAVLINK::send_text(MAV_SEVERITY severity, const char *fmt, ...) const
     va_end(arg_list);
 }
 
+void GCS_MAVLINK::send_text_rate_limited(MAV_SEVERITY severity, const uint32_t interval_ms, uint32_t &ref_to_timetime_ms, const char *fmt, ...) const
+{
+    const uint32_t now_ms = AP_HAL::millis();
+    if (now_ms - ref_to_timetime_ms < interval_ms) {
+        return;
+    }
+    ref_to_timetime_ms = now_ms;
+   
+    va_list arg_list;
+    va_start(arg_list, fmt);
+    gcs().send_textv(severity, fmt, arg_list, (1<<chan));
+    va_end(arg_list);
+}
+
 float GCS_MAVLINK::telemetry_radio_rssi()
 {
     if (AP_HAL::millis() - last_radio_status.received_ms > 5000) {
