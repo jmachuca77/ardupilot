@@ -24,7 +24,7 @@
 #include <AP_PiccoloCAN/AP_PiccoloCAN.h>
 #include "AP_CANTester.h"
 #include <AP_KDECAN/AP_KDECAN.h>
-
+#include <AP_ExCAN/AP_ExCAN.h>
 
 // table of user settable CAN bus parameters
 const AP_Param::GroupInfo AP_CANManager::CANDriver_Params::var_info[] = {

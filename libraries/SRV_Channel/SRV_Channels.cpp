@@ -321,6 +321,7 @@ void SRV_Channels::push()
             }
 #endif
             case AP_CANManager::Driver_Type_CANTester:
+            case AP_CANManager::Driver_Type_ExCAN:
             case AP_CANManager::Driver_Type_None:
             default:
                 break;
