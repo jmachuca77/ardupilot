@@ -594,44 +594,6 @@ private:
     // Rotate the stored output quaternion history through a quaternion rotation
     void StoreQuatRotate(const Quaternion &deltaQuat);
 
-    // store altimeter data
-    void StoreBaro();
-
-    // recall altimeter data at the fusion time horizon
-    // return true if data found
-    bool RecallBaro();
-
-    // store range finder data
-    void StoreRange();
-
-    // recall range finder data at the fusion time horizon
-    // return true if data found
-    bool RecallRange();
-
-    // store magnetometer data
-    void StoreMag();
-
-    // recall magetometer data at the fusion time horizon
-    // return true if data found
-    bool RecallMag();
-
-    // store true airspeed data
-    void StoreTAS();
-
-    // recall true airspeed data at the fusion time horizon
-    // return true if data found
-    bool RecallTAS();
-
-    // store optical flow data
-    void StoreOF();
-
-    // recall optical flow data at the fusion time horizon
-    // return true if data found
-    bool RecallOF();
-
-    // calculate nav to body quaternions from body to nav rotation matrix
-    void quat2Tbn(Matrix3f &Tbn, const Quaternion &quat) const;
-
     // calculate the NED earth spin vector in rad/sec
     void calcEarthRateNED(Vector3f &omega, int32_t latitude) const;
 
@@ -1060,10 +1022,6 @@ private:
     uint32_t lastInnovPassTime_ms;  // last time in msec the GPS innovations passed
     uint32_t lastInnovFailTime_ms;  // last time in msec the GPS innovations failed
     bool gpsAccuracyGood;           // true when the GPS accuracy is considered to be good enough for safe flight.
-
-    // States used for unwrapping of compass yaw error
-    float innovationIncrement;
-    float lastInnovation;
 
     // variables added for optical flow fusion
     obs_ring_buffer_t<of_elements> storedOF;    // OF data buffer
