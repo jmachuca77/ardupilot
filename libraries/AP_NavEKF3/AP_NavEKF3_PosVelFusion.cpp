@@ -407,6 +407,10 @@ void NavEKF3_core::SelectVelPosFusion()
     // get data that has now fallen behind the fusion time horizon
     gpsDataToFuse = storedGPS.recall(gpsDataDelayed,imuDataDelayed.time_ms);
 
+    // initialise all possible data we may fuse
+    fusePosData = false;
+    fuseVelData = false;
+
     // Determine if we need to fuse position and velocity data on this time step
     if (gpsDataToFuse && (PV_AidingMode == AID_ABSOLUTE) && (frontend->_fusionModeGPS != 3)) {
 
@@ -430,11 +434,8 @@ void NavEKF3_core::SelectVelPosFusion()
         velPosObs[3] = gpsDataDelayed.pos.x;
         velPosObs[4] = gpsDataDelayed.pos.y;
     } else if (extNavDataToFuse && (PV_AidingMode == AID_ABSOLUTE) && (frontend->_fusionModeGPS == 3)) {
-        // use external nav system for position
+        // use external nav system for horizontal position
         extNavUsedForPos = true;
-        activeHgtSource = HGT_SOURCE_EXTNAV;
-        fuseVelData = false;
-        fuseHgtData = true;
         fusePosData = true;
 
         // correct for external navigation sensor position
@@ -442,10 +443,6 @@ void NavEKF3_core::SelectVelPosFusion()
 
         velPosObs[3] = extNavDataDelayed.pos.x;
         velPosObs[4] = extNavDataDelayed.pos.y;
-        velPosObs[5] = extNavDataDelayed.pos.z;
-    } else {
-        fuseVelData = false;
-        fusePosData = false;
     }
 
     // fuse external navigation velocity data if available
@@ -527,7 +524,7 @@ void NavEKF3_core::SelectVelPosFusion()
         }
     }
 
-    // If we are operating without any aiding, fuse in constnat position of constant
+    // If we are operating without any aiding, fuse in constant position of constant
     // velocity measurements to constrain tilt drift. This assumes a non-manoeuvring
     // vehicle. Do this to coincide with the height fusion.
     if (fuseHgtData && PV_AidingMode == AID_NONE) {
@@ -853,7 +850,7 @@ void NavEKF3_core::FuseVelPosNED()
                     Kfusion[i] = P[i][stateIndex]*SK;
                 }
 
-                // inhibit delta angle bias state estmation by setting Kalman gains to zero
+                // inhibit delta angle bias state estimation by setting Kalman gains to zero
                 if (!inhibitDelAngBiasStates) {
                     for (uint8_t i = 10; i<=12; i++) {
                         Kfusion[i] = P[i][stateIndex]*SK;
@@ -895,8 +892,7 @@ void NavEKF3_core::FuseVelPosNED()
                 // update the covariance - take advantage of direct observation of a single state at index = stateIndex to reduce computations
                 // this is a numerically optimised implementation of standard equation P = (I - K*H)*P;
                 for (uint8_t i= 0; i<=stateIndexLim; i++) {
-                    for (uint8_t j= 0; j<=stateIndexLim; j++)
-                    {
+                    for (uint8_t j= 0; j<=stateIndexLim; j++) {
                         KHP[i][j] = Kfusion[i] * P[stateIndex][j];
                     }
                 }
@@ -995,6 +991,7 @@ void NavEKF3_core::selectHeightForFusion()
     baroDataToFuse = storedBaro.recall(baroDataDelayed, imuDataDelayed.time_ms);
 
     bool rangeFinderDataIsFresh = (imuSampleTime_ms - rngValidMeaTime_ms < 500);
+    const bool extNavDataIsFresh = (imuSampleTime_ms - extNavMeasTime_ms < 500);
     // select height source
     if (extNavUsedForPos && (frontend->_altSource == 4)) {
         // always use external navigation as the height source if using for position.
@@ -1046,12 +1043,14 @@ void NavEKF3_core::selectHeightForFusion()
         activeHgtSource = HGT_SOURCE_GPS;
     } else if ((frontend->_altSource == 3) && validOrigin && rngBcnGoodToAlign) {
         activeHgtSource = HGT_SOURCE_BCN;
+    } else if ((frontend->_altSource == 4) && extNavDataIsFresh) {
+        activeHgtSource = HGT_SOURCE_EXTNAV;
     }
 
     // Use Baro alt as a fallback if we lose range finder, GPS, external nav or Beacon
     bool lostRngHgt = ((activeHgtSource == HGT_SOURCE_RNG) && !rangeFinderDataIsFresh);
     bool lostGpsHgt = ((activeHgtSource == HGT_SOURCE_GPS) && ((imuSampleTime_ms - lastTimeGpsReceived_ms) > 2000));
-    bool lostExtNavHgt = ((activeHgtSource == HGT_SOURCE_EXTNAV) && ((imuSampleTime_ms - extNavMeasTime_ms) > 2000));
+    bool lostExtNavHgt = ((activeHgtSource == HGT_SOURCE_EXTNAV) && !extNavDataIsFresh);
     bool lostRngBcnHgt = ((activeHgtSource == HGT_SOURCE_BCN) && ((imuSampleTime_ms - rngBcnDataDelayed.time_ms) > 2000));
     if (lostRngHgt || lostGpsHgt || lostExtNavHgt || lostRngBcnHgt) {
         activeHgtSource = HGT_SOURCE_BARO;
@@ -1086,7 +1085,9 @@ void NavEKF3_core::selectHeightForFusion()
     // Select the height measurement source
     if (extNavDataToFuse && (activeHgtSource == HGT_SOURCE_EXTNAV)) {
         hgtMea = -extNavDataDelayed.pos.z;
+        velPosObs[5] = -hgtMea;
         posDownObsNoise = sq(constrain_float(extNavDataDelayed.posErr, 0.1f, 10.0f));
+        fuseHgtData = true;
     } else if (rangeDataToFuse && (activeHgtSource == HGT_SOURCE_RNG)) {
         // using range finder data
         // correct for tilt using a flat earth model
@@ -1836,9 +1837,7 @@ void NavEKF3_core::SelectBodyOdomFusion()
 
             // Fuse data into the main filter
             FuseBodyVel();
-
         }
-
     }
 }
 
