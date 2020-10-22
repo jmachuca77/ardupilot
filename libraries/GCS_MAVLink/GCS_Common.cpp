@@ -69,6 +69,7 @@
     #include <AP_KDECAN/AP_KDECAN.h>
   #endif
   #include <AP_ToshibaCAN/AP_ToshibaCAN.h>
+  #include <AP_PolarisCAN/AP_PolarisCAN.h>
   #include <AP_PiccoloCAN/AP_PiccoloCAN.h>
   #include <AP_UAVCAN/AP_UAVCAN.h>
 #endif
@@ -4852,6 +4853,13 @@ bool GCS_MAVLINK::try_send_message(const enum ap_message id)
                     AP_ToshibaCAN *ap_tcan = AP_ToshibaCAN::get_tcan(i);
                     if (ap_tcan != nullptr) {
                         ap_tcan->send_esc_telemetry_mavlink(uint8_t(chan));
+                    }
+                    break;
+                }
+                case AP_CANManager::Driver_Type_PolarisCAN: {
+                    AP_PolarisCAN *ap_PolarisCAN = AP_PolarisCAN::get_PolarisCAN(i);
+                    if (ap_PolarisCAN != nullptr) {
+                        ap_PolarisCAN->send_mavlink(uint8_t(chan));
                     }
                     break;
                 }

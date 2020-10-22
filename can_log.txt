@@ -1,0 +1,29 @@
+
+CANFDIface DEBUG :Bitrate 250000 mode 3
+CANFDIface DEBUG :Timings: quanta/bit: 10, sample point location: 90.0%
+
+CANFDIface DEBUG :Timings: presc=19 sjw=0 bs1=7 bs2=0
+
+CANMGR INFO :CAN Interface 1 initialized well
+UAVCAN INFO :AP_UAVCAN constructed
+
+UAVCANIface INFO :UAVCANIfaceMgr: Successfully added interface 536994456
+
+CANMGR INFO :Adding Interface 1 to Driver 1
+CANFDIface DEBUG :Bitrate 1000000 mode 1
+CANFDIface DEBUG :Timings: quanta/bit: 10, sample point location: 90.0%
+
+CANFDIface DEBUG :Timings: presc=4 sjw=0 bs1=7 bs2=0
+
+CANMGR INFO :CAN Interface 2 initialized well
+PolarisCAN INFO :PolarisCAN: constructed
+
+CANMGR INFO :Adding Interface 2 to Driver 2
+UAVCAN INFO :UAVCAN: init done
+
+PolarisCAN DEBUG :PolarisCAN: starting init
+
+PolarisCAN DEBUG :PolarisCAN: not initialized
+
+PolarisCAN DEBUG :PolarisCAN: init done
+

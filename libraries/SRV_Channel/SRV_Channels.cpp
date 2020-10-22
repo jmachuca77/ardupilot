@@ -335,6 +335,7 @@ void SRV_Channels::push()
             }
 #endif
             case AP_CANManager::Driver_Type_CANTester:
+            case AP_CANManager::Driver_Type_PolarisCAN:
             case AP_CANManager::Driver_Type_None:
             default:
                 break;

@@ -25,6 +25,7 @@
 #include <AP_Vehicle/AP_Vehicle.h>
 #include <AP_UAVCAN/AP_UAVCAN.h>
 #include <AP_KDECAN/AP_KDECAN.h>
+#include <AP_PolarisCAN/AP_PolarisCAN.h>
 #include <AP_ToshibaCAN/AP_ToshibaCAN.h>
 #include <AP_SerialManager/AP_SerialManager.h>
 #include <AP_PiccoloCAN/AP_PiccoloCAN.h>
@@ -217,6 +218,13 @@ void AP_CANManager::init()
 
             if (_drivers[drv_num] == nullptr) {
                 AP_BoardConfig::config_error("Failed to allocate ToshibaCAN %d\n\r", drv_num + 1);
+                continue;
+            }
+        } else if (drv_type[drv_num] == Driver_Type_PolarisCAN) {
+            _drivers[drv_num] = new AP_PolarisCAN;
+
+            if (_drivers[drv_num] == nullptr) {
+                AP_BoardConfig::config_error("Failed to allocate PolarisCAN %d\n\r", drv_num + 1);
                 continue;
             }
         } else if (drv_type[drv_num] == Driver_Type_PiccoloCAN) {
