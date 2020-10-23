@@ -34,7 +34,6 @@ AP_RPM_PolarisCAN::AP_RPM_PolarisCAN(AP_RPM &_ap_rpm, uint8_t _instance, AP_RPM:
 void AP_RPM_PolarisCAN::update(void)
 {
     uint8_t can_num_drivers = AP::can().get_num_drivers();
-    static uint32_t sendtext_timeref;
 
     for (uint8_t i = 0; i < can_num_drivers; i++) {
         //gcs().send_text_rate_limited(MAV_SEVERITY_INFO, 500, sendtext_timeref,"AP_RPM candrv# %d, drvtype: %d",can_num_drivers, AP::can().get_driver_type(i));
@@ -46,7 +45,6 @@ void AP_RPM_PolarisCAN::update(void)
                 state.rate_rpm = (float)ap_plcan->get_current_rpm();
                 state.signal_quality = 0.5f;
                 state.last_reading_ms = AP_HAL::millis();
-                gcs().send_text_rate_limited(MAV_SEVERITY_INFO, 500, sendtext_timeref,"AP_RPM RPM: %0.2f",state.rate_rpm);
         }
     }
 }
