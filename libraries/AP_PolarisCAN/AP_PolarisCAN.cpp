@@ -32,7 +32,7 @@
 extern const AP_HAL::HAL& hal;
 
 #define debug_can(level_debug, fmt, args...) do { AP::can().log_text(level_debug, "PolarisCAN",  fmt, #args); } while (0)
-
+#define AP_POLARISCAN_FUEL_LEVEL_INVALID      -1
 
 // stupid compiler is not able to optimise this under gnu++11
 // move this back when moving to gnu++17
@@ -109,12 +109,13 @@ void AP_PolarisCAN::init(uint8_t driver_index, bool enable_filters)
 }
 
 // loop to send output to ESCs in background thread
+// TODO:    Get Fuel Level
+//          Get Engine Temp
 void AP_PolarisCAN::loop()
 {
     uint64_t timeout = 0;
     const uint32_t timeout_us = MIN(AP::scheduler().get_loop_period_us(), PolarisCAN_SEND_TIMEOUT_US);
-    static uint32_t sendtext_timeref;
-    static uint32_t sendtext_timeref1;
+    // static uint32_t sendtext_timeref, sendtext_timeref1, sendtext_timeref2, sendtext_timeref3;
 
     while (true) {
         //gcs().send_text_rate_limited(MAV_SEVERITY_INFO, 500, sendtext_timeref,"PolarisCAN Loop");
@@ -135,7 +136,7 @@ void AP_PolarisCAN::loop()
 
         while (read_frame(recv_frame, timeout)) {
             uint32_t frameID = recv_frame.id & recv_frame.MaskExtID;
-            uint32_t rpm = 0;
+            uint32_t now_ms = AP_HAL::millis();
             //debug_can(AP_CANManager::LOG_DEBUG, "Recived Frame ID: %d",recv_frame.id);
             //gcs().send_text_rate_limited(MAV_SEVERITY_INFO, 500, sendtext_timeref,"RZRCAN ID: 0x%X", frameID);
             debug_can(AP_CANManager::LOG_DEBUG, "PolarisCAN: Got ID: 0x%X\n\r", frameID);
@@ -143,43 +144,54 @@ void AP_PolarisCAN::loop()
             // Get data Semaphore
             WITH_SEMAPHORE(_data_sem);
 
-            // decode Gear Data
-            if (frameID == 0x18F00500) {
+            // decode TRANS1 Data
+            if (frameID == AP_PolarisCAN::u32TRANS1_ID) {
                 debug_can(AP_CANManager::LOG_DEBUG, "PolarisCAN: Gear: 0x%X\n\r", recv_frame.data[5]);
-                _data.gear = recv_frame.data[5];
-
-                switch (recv_frame.data[5]) {
-                    case TransmissionGear::PARK:
-                        gcs().send_text_rate_limited(MAV_SEVERITY_INFO, 500, sendtext_timeref,"RZRCAN GEAR: PARK");
-                    break;
-
-                    case TransmissionGear::REVERSE:
-                        gcs().send_text_rate_limited(MAV_SEVERITY_INFO, 500, sendtext_timeref,"RZRCAN GEAR: Reverse");
-                    break;
-
-                    case TransmissionGear::NEUTRAL:
-                        gcs().send_text_rate_limited(MAV_SEVERITY_INFO, 500, sendtext_timeref,"RZRCAN GEAR: Neutral");
-                    break;
-
-                    case TransmissionGear::LOW_GEAR:
-                        gcs().send_text_rate_limited(MAV_SEVERITY_INFO, 500, sendtext_timeref,"RZRCAN GEAR: Low Gear");
-                    break;
-
-                    case TransmissionGear::HIGH_GEAR:
-                        gcs().send_text_rate_limited(MAV_SEVERITY_INFO, 500, sendtext_timeref,"RZRCAN GEAR: High Gear");
-                    break;
-
-                    default:
-                        gcs().send_text_rate_limited(MAV_SEVERITY_INFO, 500, sendtext_timeref,"RZRCAN GEAR: Error");
-                    break;
-                }
+                _TRANS1_data.u32lastRecvFrameTime = now_ms;
+                _TRANS1_data.boMessageTimeout = false;
+                _TRANS1_data.u8gear = recv_frame.data[5];
             }
 
-            // decode RPM Data
-            if (frameID == 0xCF00400) {
-                rpm = (recv_frame.data[4] << 8) | (recv_frame.data[3]);
-                _data.rpm = rpm * 0.125;
-                gcs().send_text_rate_limited(MAV_SEVERITY_INFO, 500, sendtext_timeref1,"RZRCAN RPM: %0.2f [0x%X]",rpm*0.125,rpm);
+            // decode EEC1 Data
+            if (frameID == AP_PolarisCAN::u32EEC1_ID) {
+                _EEC1_data.u32lastRecvFrameTime      = now_ms;
+                _EEC1_data.boMessageTimeout          = false;
+                _EEC1_data.u8ActEngPrcntTrqHiRes     = recv_frame.data[0] >> 4;
+                _EEC1_data.u8EngTrqMode              = recv_frame.data[0] & 0x0F;
+                _EEC1_data.u8DrvDmdEngPrcntTrq       = recv_frame.data[1];
+                _EEC1_data.u8ActEngPrcntTrq          = recv_frame.data[2];
+                _EEC1_data.u16EngSpd                 = (recv_frame.data[4] << 8) | (recv_frame.data[3]);
+                _EEC1_data.u8SrcAddCtrlDvcForEngCtrl = recv_frame.data[5];
+                _EEC1_data.u8EngStartMode            = recv_frame.data[6];
+
+                // gcs().send_text_rate_limited(MAV_SEVERITY_INFO, 500, sendtext_timeref1,"RZRCAN RPM: %0.2f [0x%X]",_EEC1_data.u16EngSpd * 0.125,_EEC1_data.u16EngSpd);
+            }
+
+            // decode DD Data
+            if (frameID == AP_PolarisCAN::u32DD_ID) {
+                _DD_data.u32lastRecvFrameTime        = now_ms;
+                _DD_data.boMessageTimeout            = false;
+                _DD_data.u8WshrFluidLvl              = recv_frame.data[0];
+                _DD_data.u8FuelLvl                   = recv_frame.data[1];
+                _DD_data.u8FuelFltrDiffPress         = recv_frame.data[2];
+                _DD_data.u8EngOilFltrDiffPress       = recv_frame.data[3];
+                _DD_data.u16CrgoAmbTemp              = (recv_frame.data[5] << 8) | (recv_frame.data[4]);
+
+                // gcs().send_text_rate_limited(MAV_SEVERITY_INFO, 500, sendtext_timeref2,"RZRCAN Fuel Level: %0.2f% [0x%X]",_DD_data.u8FuelLvl*0.4, recv_frame.data[1]);
+            }
+
+            // decode ENGTEMP
+            if (frameID == AP_PolarisCAN::u32ENGTEMP_ID) {
+                _ENGTEMP_data.u32lastRecvFrameTime        = now_ms;
+                _ENGTEMP_data.boMessageTimeout            = false;
+                _ENGTEMP_data.u8EngCoolantTemp            = recv_frame.data[0];
+                _ENGTEMP_data.u8EngFuelTemp               = recv_frame.data[1];
+                _ENGTEMP_data.u16EngOilTemp               = (recv_frame.data[3] << 8) | (recv_frame.data[2]);
+                _ENGTEMP_data.u16EngTrboChrOilTemp        = (recv_frame.data[5] << 8) | (recv_frame.data[4]);
+                _ENGTEMP_data.u8EngInterClrTemp           = recv_frame.data[6];
+                _ENGTEMP_data.u8EngInterClrThrmStateOpen  = recv_frame.data[7];
+
+                //gcs().send_text_rate_limited(MAV_SEVERITY_INFO, 500, sendtext_timeref3,"RZRCAN Coolant Temp: %d [0x%X]",(_ENGTEMP_data.u8EngCoolantTemp-40),recv_frame.data[0]);
             }
         }
     }
@@ -224,7 +236,7 @@ bool AP_PolarisCAN::read_frame(AP_HAL::CANFrame &recv_frame, uint64_t timeout)
 }
 
 // called from SRV_Channels
-void AP_PolarisCAN::update_rpm()
+void AP_PolarisCAN::update()
 {
     AP_Logger *logger = AP_Logger::get_singleton();
     if (logger && logger->logging_enabled()) {
@@ -233,8 +245,76 @@ void AP_PolarisCAN::update_rpm()
 }
 
 uint32_t AP_PolarisCAN::get_current_rpm() {
+    uint32_t now_ms = AP_HAL::millis();
     WITH_SEMAPHORE(_data_sem);
-    return _data.rpm;
+    if ((now_ms - _EEC1_data.u32lastRecvFrameTime > 2*AP_PolarisCAN::u16EEC1_PERIOD_MS) && (!_EEC1_data.boMessageTimeout)){
+        _EEC1_data.u16EngSpd = 0;
+        _EEC1_data.boMessageTimeout = true;
+    }
+    return _EEC1_data.u16EngSpd * 0.125;
+}
+
+float AP_PolarisCAN::get_coolant_temp() {
+    uint32_t now_ms = AP_HAL::millis();
+    WITH_SEMAPHORE(_data_sem);
+    if ((now_ms - _ENGTEMP_data.u32lastRecvFrameTime > 2*AP_PolarisCAN::u16ENGTEMP_PERIOD_MS) && (!_ENGTEMP_data.boMessageTimeout)){
+        _ENGTEMP_data.u8EngCoolantTemp = 0xFF;
+        _ENGTEMP_data.boMessageTimeout = true;
+    }
+    return (float)_ENGTEMP_data.u8EngCoolantTemp-40;
+}
+
+float AP_PolarisCAN::get_fuel_level() {
+    uint32_t now_ms = AP_HAL::millis();
+    WITH_SEMAPHORE(_data_sem);
+    if ((now_ms - _DD_data.u32lastRecvFrameTime > 2*AP_PolarisCAN::u16DD_PERIOD_MS) && (!_DD_data.boMessageTimeout)){
+        _DD_data.u8FuelLvl = 0xFF;
+        _DD_data.boMessageTimeout = true;
+    }
+    if (_DD_data.u8FuelLvl == 0xFF) {
+        return AP_POLARISCAN_FUEL_LEVEL_INVALID;
+    } else {
+        return (float)_DD_data.u8FuelLvl*0.4;
+    }
+    
+}
+
+MAV_ICE_TRANSMISSION_GEAR_STATE AP_PolarisCAN::get_current_gear() {
+    uint32_t now_ms = AP_HAL::millis();
+    WITH_SEMAPHORE(_data_sem);
+    if ((now_ms - _TRANS1_data.u32lastRecvFrameTime > 2*AP_PolarisCAN::u16TRANS1_PERIOD_MS) && (!_TRANS1_data.boMessageTimeout)){
+        _TRANS1_data.u8gear = 0x00;
+        _TRANS1_data.boMessageTimeout = true;
+    }
+    MAV_ICE_TRANSMISSION_GEAR_STATE gear_state;
+
+    switch (_TRANS1_data.u8gear) {
+        case TransmissionGear::PARK:
+            gear_state = MAV_ICE_TRANSMISSION_GEAR_STATE_PARK;
+        break;
+
+        case TransmissionGear::REVERSE:
+            gear_state = MAV_ICE_TRANSMISSION_GEAR_STATE_REVERSE;
+        break;
+
+        case TransmissionGear::NEUTRAL:
+            gear_state = MAV_ICE_TRANSMISSION_GEAR_STATE_NEUTRAL;
+        break;
+
+        case TransmissionGear::LOW_GEAR:
+            gear_state = MAV_ICE_TRANSMISSION_GEAR_STATE_FORWARD_1;
+        break;
+
+        case TransmissionGear::HIGH_GEAR:
+            gear_state = MAV_ICE_TRANSMISSION_GEAR_STATE_FORWARD_2;
+        break;
+
+        default:
+            gear_state = MAV_ICE_TRANSMISSION_GEAR_STATE_UNKNOWN;
+        break;
+    }
+
+    return gear_state;
 }
 
 // send ESC telemetry messages over MAVLink

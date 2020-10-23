@@ -39,10 +39,16 @@ public:
     void init(uint8_t driver_index, bool enable_filters) override;
     bool add_interface(AP_HAL::CANIface* can_iface) override;
 
-    // called from SRV_Channels
-    void update_rpm();
+    // Currently not Used
+    void update();
 
+    // Called from AP_RPM when using PolarisCAN type
     uint32_t get_current_rpm();
+
+    // Called from AP_ICEEngine
+    MAV_ICE_TRANSMISSION_GEAR_STATE get_current_gear();
+    float get_coolant_temp();
+    float get_fuel_level();
 
     // send ESC telemetry messages over MAVLink
     void send_mavlink(uint8_t mav_chan);
@@ -50,6 +56,7 @@ public:
 private:
 
     enum TransmissionGear {
+        UNKNOWN     = 0x00,
         PARK        = 0x50,
         REVERSE     = 0x52,
         NEUTRAL     = 0x4E,
@@ -80,9 +87,50 @@ private:
     // telemetry data (rpm, voltage)
     HAL_Semaphore _data_sem;
 
-    struct data_info_t {
-        uint32_t    rpm;            // rpm
-        uint8_t     gear;           // gear
+    const uint32_t u32EEC1_ID = 0x0CF00400;
+    const uint16_t u16EEC1_PERIOD_MS = 20;
+    struct EEC1_data_t {
+        uint32_t u32lastRecvFrameTime;
+        bool     boMessageTimeout;
+        uint8_t  u8ActEngPrcntTrqHiRes;
+        uint8_t  u8EngTrqMode;
+        uint8_t  u8DrvDmdEngPrcntTrq;
+        uint8_t  u8ActEngPrcntTrq;
+        uint16_t u16EngSpd;
+        uint8_t  u8SrcAddCtrlDvcForEngCtrl;
+        uint8_t  u8EngStartMode;
+    } _EEC1_data;
 
-    } _data;
+    const uint32_t u32ENGTEMP_ID = 0x18FEEE00;
+    const uint16_t u16ENGTEMP_PERIOD_MS = 1180;
+    struct ENGTEMP_data_t {
+        uint32_t u32lastRecvFrameTime;
+        bool     boMessageTimeout;
+        uint8_t  u8EngCoolantTemp;
+        uint8_t  u8EngFuelTemp;
+        uint16_t u16EngOilTemp;
+        uint16_t u16EngTrboChrOilTemp;
+        uint8_t  u8EngInterClrTemp;
+        uint8_t  u8EngInterClrThrmStateOpen;
+    } _ENGTEMP_data;
+
+    const uint32_t u32DD_ID = 0x18FEFC17;
+    const uint16_t u16DD_PERIOD_MS = 1180;
+    struct DD_data_t {
+        uint32_t u32lastRecvFrameTime;
+        bool     boMessageTimeout;
+        uint8_t  u8WshrFluidLvl;
+        uint8_t  u8FuelLvl;
+        uint8_t  u8FuelFltrDiffPress;
+        uint8_t  u8EngOilFltrDiffPress;
+        uint16_t u16CrgoAmbTemp;        
+    } _DD_data;
+
+    const uint32_t u32TRANS1_ID = 0x18F00500;
+    const uint16_t u16TRANS1_PERIOD_MS = 110;
+    struct TRANS1_data_t {
+        uint32_t u32lastRecvFrameTime;
+        bool     boMessageTimeout;
+        uint8_t  u8gear;
+    } _TRANS1_data;
 };
