@@ -224,12 +224,17 @@ bool AP_PolarisCAN::read_frame(AP_HAL::CANFrame &recv_frame, uint64_t timeout)
 }
 
 // called from SRV_Channels
-void AP_PolarisCAN::update()
+void AP_PolarisCAN::update_rpm()
 {
     AP_Logger *logger = AP_Logger::get_singleton();
     if (logger && logger->logging_enabled()) {
         WITH_SEMAPHORE(_data_sem);
     }
+}
+
+uint32_t AP_PolarisCAN::get_current_rpm() {
+    WITH_SEMAPHORE(_data_sem);
+    return _data.rpm;
 }
 
 // send ESC telemetry messages over MAVLink

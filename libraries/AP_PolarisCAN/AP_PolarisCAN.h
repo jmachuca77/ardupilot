@@ -40,7 +40,9 @@ public:
     bool add_interface(AP_HAL::CANIface* can_iface) override;
 
     // called from SRV_Channels
-    void update();
+    void update_rpm();
+
+    uint32_t get_current_rpm();
 
     // send ESC telemetry messages over MAVLink
     void send_mavlink(uint8_t mav_chan);
