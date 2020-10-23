@@ -17,6 +17,7 @@
 #include "RPM_Pin.h"
 #include "RPM_SITL.h"
 #include "RPM_EFI.h"
+#include "RPM_PolarisCAN.h"
 #include "RPM_HarmonicNotch.h"
 
 extern const AP_HAL::HAL& hal;
@@ -119,6 +120,9 @@ void AP_RPM::init(void)
         }
         if (type == RPM_TYPE_PIN) {
             drivers[i] = new AP_RPM_Pin(*this, i, state[i]);
+        }
+        if (type == RPM_TYPE_PLCAN) {
+            drivers[i] = new AP_RPM_PolarisCAN(*this, i, state[i]);
         }
 #endif
 #if EFI_ENABLED
