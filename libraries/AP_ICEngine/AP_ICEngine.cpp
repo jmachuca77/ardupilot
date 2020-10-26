@@ -24,6 +24,8 @@
 #include <AP_Arming/AP_Arming.h>
 #include <AP_RPM/AP_RPM.h>
 #include <AP_Relay/AP_Relay.h>
+#include <AP_CANManager/AP_CANManager.h>
+#include <AP_PolarisCAN/AP_PolarisCAN.h>
 
 extern const AP_HAL::HAL& hal;
 
@@ -344,6 +346,26 @@ const AP_Param::GroupInfo AP_ICEngine::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("START_PIN",  58, AP_ICEngine, starter_pin, 0),
 
+    // @Param: FUEL_SRC
+    // @DisplayName: Fuel Level Source
+    // @Description: This is used to select if the fuel level is read by analog sensor or by CAN bus.
+    // @Values: 0:Disabled,1:Analog,2:PolarisCAN
+    // @User: Advanced
+    AP_GROUPINFO("FUEL_SRC", 59, AP_ICEngine, fuel.source, 1),
+
+    // @Param: GEAR_SRC
+    // @DisplayName: Gear Status Source
+    // @Description: This is used to select if the gear status is fedback from pwm values or by CAN bus.
+    // @Values: 0:Disabled,1:PWM,2:PolarisCAN
+    // @User: Advanced
+    AP_GROUPINFO("GEAR_SRC", 60, AP_ICEngine, gear.source, 1),
+
+    // @Param: TEMP_SRC
+    // @DisplayName: Coolant Temperature Source
+    // @Description: This is used to select if the Coolant Temperature is read by analog sensor or by CAN bus.
+    // @Values: 0:Disabled,1:Analog,2:PolarisCAN
+    // @User: Advanced
+    AP_GROUPINFO("TEMP_SRC", 61, AP_ICEngine, temperature.source, 1),
 
     AP_GROUPEND
 };
@@ -792,7 +814,7 @@ void AP_ICEngine::determine_state()
 
 void AP_ICEngine::set_output_channels()
 {
-    if (!SRV_Channels::function_assigned(SRV_Channel::k_engine_gear)) {
+    if ((!SRV_Channels::function_assigned(SRV_Channel::k_engine_gear) || (gear.source <= 0)) && (gear.source != 2)) {
         // if we don't have a gear then set it to a known invalid state
         gear.pwm_active = ICE_GEAR_STATE_PWM_INVALID;
         gear.state = MAV_ICE_TRANSMISSION_GEAR_STATE_UNKNOWN;
@@ -800,7 +822,10 @@ void AP_ICEngine::set_output_channels()
         // on boot or in an unknown state, set gear to trim and find out what that value is and set to that state
         SRV_Channels::set_output_to_trim(SRV_Channel::k_engine_gear);
         SRV_Channels::get_output_pwm(SRV_Channel::k_engine_gear, gear.pwm_active);
-        gear.state = convertPwmToGearState(gear.pwm_active);
+        // only set gear state if we are not using CAN for gear status.
+        if (gear.source == 1) {  
+            gear.state = convertPwmToGearState(gear.pwm_active);
+        }
     } else {
         // normal operation, set the output
         SRV_Channels::set_output_pwm(SRV_Channel::k_engine_gear, gear.pwm_active);
@@ -944,6 +969,19 @@ void AP_ICEngine::update_gear()
         gear.pending.change_duration_per_posiiton.set_and_save(2);
     }
 
+    // Update gear state from CAN Bus values
+    if (gear.source == 2) {
+        uint8_t can_num_drivers = AP::can().get_num_drivers();
+        for (uint8_t i = 0; i < can_num_drivers; i++) {
+            if (AP::can().get_driver_type(i) == AP_CANManager::Driver_Type_PolarisCAN) {
+                    AP_PolarisCAN *ap_plcan = AP_PolarisCAN::get_PolarisCAN(i);
+                    if (ap_plcan == nullptr) {
+                        continue;
+                    }
+                    gear.state = ap_plcan->get_current_gear();
+            }
+        }
+    }
 
     // delay the gear change for user-defined duration. This helps ensure the vehicle is stopped before we attempt to change gears
     if (gear.pending.stop_vehicle_start_ms > 0) {
@@ -954,7 +992,12 @@ void AP_ICEngine::update_gear()
 
             // we've waited to stop the vehicle, now set the gear and wait again for it to physically change
             gear.pwm_active = gear.pending.pwm;
-            gear.state = gear.pending.state;
+
+            // only set gear state if we are not using CAN for gear status.
+            if (gear.source == 1) {
+                gear.state = gear.pending.state;
+            }
+            
             force_send_status = true;
         }
 
@@ -1377,45 +1420,88 @@ int8_t AP_ICEngine::Gear_t::get_position(const MAV_ICE_TRANSMISSION_GEAR_STATE g
 void AP_ICEngine::update_fuel()
 {
     #define AP_ICENGINE_FUEL_LEVEL_BATTERY_INSTANCE 1
-
-    if (!AP::battery().healthy(AP_ICENGINE_FUEL_LEVEL_BATTERY_INSTANCE)) {
+    // Fuel Level disabled
+    if (fuel.source <= 0) {
         fuel.value = AP_ICENGINE_FUEL_LEVEL_INVALID;
+        fuel.last_sample_ms = 0;
         return;
     }
 
     const uint32_t now_ms = AP_HAL::millis();
 
-    const float new_value = AP::battery().capacity_remaining_pct(AP_ICENGINE_FUEL_LEVEL_BATTERY_INSTANCE);
+    // Analog Fuel Level readings
+    if (fuel.source == 1) {
+        if (!AP::battery().healthy(AP_ICENGINE_FUEL_LEVEL_BATTERY_INSTANCE)) {
+            fuel.value = AP_ICENGINE_FUEL_LEVEL_INVALID;
+            return;
+        }
 
-    if (fuel.last_sample_ms == 0 || (fuel.last_sample_ms - now_ms > 5000)) {
-        // jump to it immediately on first or stale
-        fuel.value = new_value;
+        const float new_value = AP::battery().capacity_remaining_pct(AP_ICENGINE_FUEL_LEVEL_BATTERY_INSTANCE);
+
+        if (fuel.last_sample_ms == 0 || (fuel.last_sample_ms - now_ms > 5000)) {
+            // jump to it immediately on first or stale
+            fuel.value = new_value;
+        }
+        // Low Pass filter, very slow
+        fuel.value = 0.1f*fuel.value + 0.9f*new_value;
+        fuel.last_sample_ms = now_ms;
     }
-    // Low Pass filter, very slow
-    fuel.value = 0.1f*fuel.value + 0.9f*new_value;
-    fuel.last_sample_ms = now_ms;
+
+    // Polaris CAN Bus Fuel Level reading
+    if (fuel.source == 2) {
+        uint8_t can_num_drivers = AP::can().get_num_drivers();
+        for (uint8_t i = 0; i < can_num_drivers; i++) {
+            if (AP::can().get_driver_type(i) == AP_CANManager::Driver_Type_PolarisCAN) {
+                    AP_PolarisCAN *ap_plcan = AP_PolarisCAN::get_PolarisCAN(i);
+                    if (ap_plcan == nullptr) {
+                        continue;
+                    }
+                    fuel.value = (float)ap_plcan->get_fuel_level();
+                    fuel.last_sample_ms = now_ms;
+            }
+        }
+    }
 }
 
 void AP_ICEngine::update_temperature()
 {
-    if (temperature.source == nullptr) {
-        temperature.source = hal.analogin->channel(temperature.pin);
+    if (temperature.analog_source == nullptr) {
+        temperature.analog_source = hal.analogin->channel(temperature.pin);
         return;
     }
-    if (temperature.pin <= 0) {
+
+    if ((temperature.pin <= 0) && (temperature.source != 2)){
         // disabled
         temperature.value = 0;
         temperature.last_sample_ms = 0;
         return;
     }
 
-    temperature.source->set_pin(temperature.pin);
+    // CAN source selected
+    if (temperature.source == 2) {
+        const uint32_t now_ms = AP_HAL::millis();
+        uint8_t can_num_drivers = AP::can().get_num_drivers();
+
+        for (uint8_t i = 0; i < can_num_drivers; i++) {
+            if (AP::can().get_driver_type(i) == AP_CANManager::Driver_Type_PolarisCAN) {
+                    AP_PolarisCAN *ap_plcan = AP_PolarisCAN::get_PolarisCAN(i);
+                    if (ap_plcan == nullptr) {
+                        continue;
+                    }
+                    temperature.value = (float)ap_plcan->get_coolant_temp();
+                    temperature.last_sample_ms = now_ms;
+            }
+        }
+        return;
+    }
+
+    temperature.analog_source->set_pin(temperature.pin);
 
     float v, new_temp_value = 0;
     if (temperature.ratiometric) {
-        v = temperature.source->voltage_average_ratiometric();
+        v = temperature.analog_source->voltage_average_ratiometric();
     } else {
-        v = temperature.source->voltage_average();
+        v = temperature.analog_source->voltage_average();
     }
 
     switch ((AP_ICEngine::Temperature_Function)temperature.function.get()) {
@@ -1475,7 +1561,7 @@ void AP_ICEngine::send_status()
             // not active
             continue;
         }
-
+        
         const bool send_temp = force || (now_ms - temperature.last_send_ms >= 1000);
         if (send_temp && HAVE_PAYLOAD_SPACE((mavlink_channel_t)chan, COMMAND_LONG)) {
 
@@ -1491,10 +1577,22 @@ void AP_ICEngine::send_status()
                     temperature.max,    // too hot
                     temperature.min,    // too cold
                     0,0,0);
+            // static uint32_t sendtext_timeref;
+            // gcs().send_text_rate_limited(MAV_SEVERITY_INFO, 500, sendtext_timeref,"AP_ICE Temp: %0.2f", current_temp);
         }
 
+        
+
         uint16_t current_gear_pwm = ICE_GEAR_STATE_PWM_INVALID;
-        const bool hasGear = SRV_Channels::get_output_pwm(SRV_Channel::k_engine_gear, current_gear_pwm);
+
+        bool hasGear = false;
+        if (gear.source == 1) {
+            hasGear = SRV_Channels::get_output_pwm(SRV_Channel::k_engine_gear, current_gear_pwm);
+        }
+        if (gear.source == 2) {
+            hasGear = true;
+        }
+        
         const bool send_gear = force || (now_ms - gear.last_send_ms >= 1000);
         if (hasGear && send_gear && HAVE_PAYLOAD_SPACE((mavlink_channel_t)chan, COMMAND_LONG)) {
 
@@ -1513,12 +1611,18 @@ void AP_ICEngine::send_status()
                     0);                             // param7 UNUSED
         }
 
-
         const bool send_fuel = force || (now_ms - fuel.last_send_ms >= 1000);
         if (send_fuel && HAVE_PAYLOAD_SPACE((mavlink_channel_t)chan, COMMAND_LONG)) {
 
             fuel_sent = true;
-            const float current_fuel = AP::battery().healthy() ? fuel.value : AP_ICENGINE_FUEL_LEVEL_INVALID;
+            float current_fuel = AP_ICENGINE_FUEL_LEVEL_INVALID;
+            if (fuel.source == 1) {
+                current_fuel = AP::battery().healthy() ? fuel.value : AP_ICENGINE_FUEL_LEVEL_INVALID;
+            }
+
+            if (fuel.source ==2) {
+                current_fuel = fuel.value;
+            }
 
             mavlink_msg_command_long_send(
                     (mavlink_channel_t)chan, 0, 0,

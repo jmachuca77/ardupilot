@@ -145,6 +145,7 @@ private:
     uint32_t force_staying_in_DELAY_NO_IGNITION_duration_ms;
 
     struct Gear_t {
+        AP_Int8 source;
         bool is_forward() { return Gear_t::is_forward(state); }
         bool is_reverse() { return Gear_t::is_reverse(state); }
         bool is_neutral() { return Gear_t::is_neutral(state); }
@@ -211,6 +212,7 @@ private:
 
     void update_fuel();
     struct {
+        AP_Int8 source;
         AP_Float offset;
         float value;
         uint32_t last_sample_ms;
@@ -219,6 +221,7 @@ private:
 
     // engine temperature for feedback
     struct {
+        AP_Int8 source;
         AP_Int8 pin;
         int8_t pin_prev; // check for changes at runtime
         AP_Float scaler;
@@ -229,12 +232,12 @@ private:
         AP_Int8 function;
         AP_Float too_hot_throttle_reduction_factor;
 
-        AP_HAL::AnalogSource *source;
+        AP_HAL::AnalogSource *analog_source;
         float value;
         uint32_t last_sample_ms;
         uint32_t last_send_ms;
 
-        bool is_healthy() const { return (pin > 0 && last_sample_ms && (AP_HAL::millis() - last_sample_ms < 1000)); }
+        bool is_healthy() const { return (((pin > 0) || (source == 2)) && last_sample_ms && (AP_HAL::millis() - last_sample_ms < 1000)); }
         bool too_hot() const {  return max != 0 && (min < max) && (value > max); } // note, min == max will return false.
         bool too_cold() const { return min != 0 && (min < max) && (value < min); } // note, min == max will return false.
     } temperature;
