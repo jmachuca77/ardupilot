@@ -13,14 +13,14 @@
 --        - pitch controls target distance to wall (limited to no less than 2m, no more than 8m)
 --        - throttle input causes vehicle to switch back to manual mode
 --        - climbs at 50cm/s (need parameter?) stopping at 2m intervals
---    e) switch controls switching in and out of auto mode (use ZigZag switch?)
+--    e) ZIGZAG_SaveWP aux switch controls switching in and out of auto mode
 
 -- constants
 local update_rate_ms = 10           -- script updates at 100hz
 local update_rate_dt = update_rate_ms / 1000.0 -- update rate in seconds
 local copter_guided_mode_num = 4    -- Copter's guided flight mode is mode 4
 local aux_switch_function = 61      -- auxiliary switch function controlling mode.  61 is ZIGZAG_SaveWP
-local climb_accel_max = 0.25         -- climb rate acceleration max in m/s/s
+local climb_accel_max = 0.25        -- climb rate acceleration max in m/s/s
 local climb_rate_max = 2            -- climb rate max in m/s
 local climb_rate_chg_max = climb_accel_max * update_rate_dt -- max change in climb rate in a single iteration
 local roll_pitch_speed_max = 2      -- horizontal speed max in m/s
@@ -57,6 +57,11 @@ local climb_pause_counter = 0       -- current pause counter value
 local roll_speed = 0                -- target horizontal roll speed in m/s
 local pitch_speed = 0               -- target horizontal pitch speed in m/s
 local wall_dist_target = 5          -- target distance to wall
+
+-- get the maximum speed in order to decelerate to zero within the given distance
+function get_speed_max(distance, accel_max)
+  return math.sqrt(2.0 * math.max(0, distance) * accel_max)
+end
 
 -- the main update function that uses the takeoff and velocity controllers to fly a rough square pattern
 function update()
@@ -152,8 +157,9 @@ function update()
       climb_total = climb_total + climb_chg
 
       -- determine if we should pause
-      if (math.abs(climb_interval_total) >= climb_stop_interval) then
-        gcs:send_text(0, "WallClimb: pausing at " .. tostring(climb_total) .. "m")
+      local dist_to_interval = climb_stop_interval - math.abs(climb_interval_total)
+      if (dist_to_interval <= 0) then
+        gcs:send_text(0, "WallClimb: pausing at " .. string.format("%3.1f", climb_total) .. "m")
         climb_pause_counter = climb_pause_counter_max
         climb_interval_total = 0
 
@@ -168,6 +174,12 @@ function update()
 
       -- default target climb rate to lane climb rate
       local climb_rate_target = lane_climb_rate
+
+      -- limit target speed so vehicle can stop before next interval
+	  -- speed limit is always at least 0.1m/s so copter doesn't get stuck near interval
+      local speed_max = math.max(get_speed_max(dist_to_interval, climb_accel_max), 0.1)
+      climb_rate_target = math.max(climb_rate_target, -speed_max)
+      climb_rate_target = math.min(climb_rate_target, speed_max)
 
       -- if paused set target climb rate to zero
       if (climb_pause_counter > 0) then
@@ -190,8 +202,11 @@ function update()
       end
 
       -- calculate acceleration limited climb rate
-      climb_rate = math.min(climb_rate_target, climb_rate + climb_rate_chg_max, climb_rate_max)
-      climb_rate = math.max(climb_rate_target, climb_rate - climb_rate_chg_max, -climb_rate_max)
+      if (climb_rate_target >= climb_rate) then
+        climb_rate = math.min(climb_rate_target, climb_rate + climb_rate_chg_max, climb_rate_max)
+      else
+        climb_rate = math.max(climb_rate_target, climb_rate - climb_rate_chg_max, -climb_rate_max)
+      end
     end
   end
 
