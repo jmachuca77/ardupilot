@@ -20,6 +20,39 @@
 
 #define PolarisCAN_MAX_NUM_ESCS 12
 
+// Message IDs and Periods, 0 means on demand
+#define nEEC1_ID      0x0CF00400
+#define nEEC1_PERIOD_MS       20
+
+#define nENGTEMP_ID   0x18FEEE00
+#define nENGTEMP_PERIOD_MS  1180
+
+#define nDD_ID        0x18FEFC17
+#define nDD_PERIOD_MS       1180
+
+#define nTRANS1_ID    0x18F00500
+#define nTRANS1_PERIOD_MS    110
+
+#define nFWD_ID       0x1CFDDF00
+#define nFWD_PERIOD_MS       550
+
+#define nADC_ID       0x1CFF6A00
+#define nADC_PERIOD_MS       550
+
+#define nENGHRS_ID    0x18FEE500
+#define nENGHRS_PERIOD_MS      0
+
+#define nDDDTC_ID     0x18FECA17
+#define nDDDTC_PERIOS_MS       1
+
+#define nENGDTC_ID    0x18FECA00
+#define nENGDTC_PERIOS_MS      1
+
+#define nSTRDTC_ID    0x18FECA13
+#define nSTRDTC_PERIOS_MS      1
+
+#define nENG_HOUR_REQ_INTERVAL 500
+
 class CANTester;
 
 class AP_PolarisCAN : public AP_CANDriver {
@@ -87,8 +120,6 @@ private:
     // telemetry data (rpm, voltage)
     HAL_Semaphore _data_sem;
 
-    const uint32_t u32EEC1_ID = 0x0CF00400;
-    const uint16_t u16EEC1_PERIOD_MS = 20;
     struct EEC1_data_t {
         uint32_t u32lastRecvFrameTime;
         bool     boMessageTimeout;
@@ -101,8 +132,6 @@ private:
         uint8_t  u8EngStartMode;
     } _EEC1_data;
 
-    const uint32_t u32ENGTEMP_ID = 0x18FEEE00;
-    const uint16_t u16ENGTEMP_PERIOD_MS = 1180;
     struct ENGTEMP_data_t {
         uint32_t u32lastRecvFrameTime;
         bool     boMessageTimeout;
@@ -114,8 +143,6 @@ private:
         uint8_t  u8EngInterClrThrmStateOpen;
     } _ENGTEMP_data;
 
-    const uint32_t u32DD_ID = 0x18FEFC17;
-    const uint16_t u16DD_PERIOD_MS = 1180;
     struct DD_data_t {
         uint32_t u32lastRecvFrameTime;
         bool     boMessageTimeout;
@@ -126,11 +153,85 @@ private:
         uint16_t u16CrgoAmbTemp;        
     } _DD_data;
 
-    const uint32_t u32TRANS1_ID = 0x18F00500;
-    const uint16_t u16TRANS1_PERIOD_MS = 110;
     struct TRANS1_data_t {
         uint32_t u32lastRecvFrameTime;
         bool     boMessageTimeout;
         uint8_t  u8gear;
     } _TRANS1_data;
+
+    enum FWDStatus {
+        FWD_NOTENGAGED      = 0x00,
+        FWD_ENGAGED         = 0x01,
+        FWD_ERROR           = 0x10,
+        FWD_NOTAVAILABLE    = 0x11
+    } FWDStatus;
+
+    struct FWD_data_t {
+        uint32_t u32lastRecvFrameTime;
+        bool     boMessageTimeout;
+        uint8_t  u8FWDActStatus;
+    } _FWD_data;
+
+    enum ADCStatus {
+        ADC_NOTENGAGED      = 0x00,
+        ADC_ENGAGED         = 0x01,
+        ADC_ERROR           = 0x10,
+        ADC_NOTAVAILABLE    = 0x11
+    } ADCStatus;
+
+    enum SwStatus {
+        SW_NEUTRAL       = 0x0,
+        SW_LEFT          = 0x1,
+        SW_RIGHT         = 0x4
+    } SwStatus;
+
+    struct ADC_data_t {
+        uint32_t u32lastRecvFrameTime;
+        bool     boMessageTimeout;
+        uint8_t  u8ADCActStatus;
+        uint8_t  u84WDSwStatus;
+    } _ADC_data;
+
+    struct ENGHRS_data_t {
+        uint32_t u32lastRecvFrameTime;
+        bool     boMessageTimeout;
+        float    fTotalEngineHours;
+        float    fTotalEngineRevolutions;
+    } _ENGHRS_data;
+
+    struct STRDTC_data_t {
+        uint32_t u32lastRecvFrameTime;
+        bool     boMessageTimeout;
+        uint32_t u32SPN;
+        uint8_t  u8FMI;
+        uint8_t  u8OC;
+    } _STRDTC_data;
+
+    struct DDDTC_data_t {
+        uint32_t u32lastRecvFrameTime;
+        bool     boMessageTimeout;
+        uint32_t u32SPN;
+        uint8_t  u8FMI;
+        uint8_t  u8OC;
+    } _DDDTC_data;
+
+    struct ENGDTC_data_t {
+        uint32_t u32lastRecvFrameTime;
+        bool     boMessageTimeout;
+        uint32_t u32SPN;
+        uint8_t  u8FMI;
+        uint8_t  u8OC;
+    } _ENGDTC_data;
+    
+    // structure for sending turn rate command to ESC
+    union req_eng_hours_cmd_t {
+        struct PACKED {
+            uint8_t data1;
+            uint8_t data2;
+            uint8_t data3;
+        };
+        uint8_t data[3];
+    };
+
+    AP_HAL::CANFrame req_eng_hours_frame;
 };
