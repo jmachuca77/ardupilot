@@ -43,13 +43,16 @@
 #define nENGHRS_PERIOD_MS      0
 
 #define nDDDTC_ID     0x18FECA17
-#define nDDDTC_PERIOS_MS       1
+#define nDDDTC_PERIOD_MS       1
 
 #define nENGDTC_ID    0x18FECA00
-#define nENGDTC_PERIOS_MS      1
+#define nENGDTC_PERIOD_MS      1
 
 #define nSTRDTC_ID    0x18FECA13
-#define nSTRDTC_PERIOS_MS      1
+#define nSTRDTC_PERIOD_MS      1
+
+#define nVDHR_ID      0x18FEC117
+#define nVDHR_PERIOD_MS     1100
 
 #define nENG_HOUR_REQ_INTERVAL 500
 
@@ -222,8 +225,15 @@ private:
         uint8_t  u8FMI;
         uint8_t  u8OC;
     } _ENGDTC_data;
-    
-    // structure for sending turn rate command to ESC
+
+    struct VDHR_data_t {
+        uint32_t u32lastRecvFrameTime;
+        bool     boMessageTimeout;
+        float    fOdometer;
+        float    fTripDistance;
+    } _VDHR_data;
+
+    // structure for sending Engine Hours Request
     union req_eng_hours_cmd_t {
         struct PACKED {
             uint8_t data1;

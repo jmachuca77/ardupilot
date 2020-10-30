@@ -252,13 +252,23 @@ void AP_PolarisCAN::loop()
                 break;    
 
                 case nENGDTC_ID:
-                    _ENGDTC_data.u32lastRecvFrameTime     = now_ms;
-                    _ENGDTC_data.boMessageTimeout         = false;
-                    _ENGDTC_data.u32SPN                   = (((recv_frame.data[4] & 0xE0) >> 5) << 16) + (recv_frame.data[3] << 8) + (recv_frame.data[2]);
-                    _ENGDTC_data.u8FMI                    = recv_frame.data[4] & 0x1F;
-                    _ENGDTC_data.u8OC                     = recv_frame.data[5] & 0x7F;
+                    _ENGDTC_data.u32lastRecvFrameTime    = now_ms;
+                    _ENGDTC_data.boMessageTimeout        = false;
+                    _ENGDTC_data.u32SPN                  = (((recv_frame.data[4] & 0xE0) >> 5) << 16) + (recv_frame.data[3] << 8) + (recv_frame.data[2]);
+                    _ENGDTC_data.u8FMI                   = recv_frame.data[4] & 0x1F;
+                    _ENGDTC_data.u8OC                    = recv_frame.data[5] & 0x7F;
                     // gcs().send_text(MAV_SEVERITY_INFO, "RZRCAN ENGDTC FMI: %d [0x%X] SPN: %ld [0x%lX] OC: %d [0x%X]", _ENGDTC_data.u8FMI, _ENGDTC_data.u8FMI, _ENGDTC_data.u32SPN, _ENGDTC_data.u32SPN, _ENGDTC_data.u8OC, _ENGDTC_data.u8OC);
                 break;    
+
+                case nVDHR_ID:
+                    uint32_t rawOdom = (recv_frame.data[3] << 24) + (recv_frame.data[2] << 16) + (recv_frame.data[1] << 8) + (recv_frame.data[0]);
+                    uint32_t rawTrip = (recv_frame.data[7] << 24) + (recv_frame.data[6] << 16) + (recv_frame.data[5] << 8) + (recv_frame.data[4]);
+                    _VDHR_data.u32lastRecvFrameTime      = now_ms;
+                    _VDHR_data.boMessageTimeout          = false;
+                    _VDHR_data.fOdometer                 = rawOdom * 0.005;
+                    _VDHR_data.fTripDistance             = rawTrip * 0.005;
+                    gcs().send_text(MAV_SEVERITY_INFO, "RZRCAN Odom: %0.2f [0x%X] Trip: %0.2f [0x%X]", _VDHR_data.fOdometer, rawOdom, _VDHR_data.fTripDistance, rawTrip);
+                break;                
             };
         }
     }
