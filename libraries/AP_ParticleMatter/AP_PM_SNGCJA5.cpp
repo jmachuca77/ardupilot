@@ -104,9 +104,9 @@ void AP_PM_SNGCJA5::read_frames(void)
                                             current_loc.lng,
                                             (double)current_loc.alt*1.0e-2f,
                                             val[0],
-                                            (double)PM1_0,
-                                            (double)PM2_5,
-                                            (double)PM10_0
+                                            (double)PM1_0*1.0e-3f,
+                                            (double)PM2_5*1.0e-3f,
+                                            (double)PM10_0*1.0e-3f
                                             );
                                         
     AP::logger().Write("PM2", "TimeUS,lat,lon,alt,PC0_5,PC1_0,PC2_5,PC5_0,PC7_5,PC10_0", "QLLfIIIIII",
