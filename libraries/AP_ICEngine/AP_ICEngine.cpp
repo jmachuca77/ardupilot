@@ -25,7 +25,7 @@
 #include <AP_RPM/AP_RPM.h>
 #include <AP_Relay/AP_Relay.h>
 #include <AP_CANManager/AP_CANManager.h>
-#include <AP_PolarisCAN/AP_PolarisCAN.h>
+
 
 extern const AP_HAL::HAL& hal;
 
@@ -128,6 +128,12 @@ const AP_Param::GroupInfo AP_ICEngine::var_info[] = {
     // @Description: Options for ICE control
     // @Bitmask: 0:DisableIgnitionRCFailsafe
     AP_GROUPINFO("OPTIONS", 15, AP_ICEngine, options, AP_ICENGINE_OPTIONS_MASK_DEFAULT),
+
+    // @Param: PWM_PARK_D
+    // @DisplayName: Gear PWM for Park Down
+    // @Description: This is the output PWM value sent to the gear servo channel when the vehicle transmission is in PARK when decreasing the PWM
+    // @User: Advanced
+    AP_GROUPINFO("PWM_STEP",  16, AP_ICEngine, gear.pwm_step, 1),
 
     // @Param: RESTART_CNT
     // @DisplayName: Restart attempts allowed
@@ -614,6 +620,45 @@ float AP_ICEngine::Recharge::get_smoothed_battery_voltage()
     return battery_voltage_last;
 }
 
+AP_ICEngine::enGearOrder_t AP_ICEngine::convertGearStateToGearOrder(MAV_ICE_TRANSMISSION_GEAR_STATE gearState) {
+    AP_ICEngine::enGearOrder_t gearOrder;
+                    
+    switch (gearState) {
+        case MAV_ICE_TRANSMISSION_GEAR_STATE_PARK: /* Park. | */
+            gearOrder = ICE_GEAR_ORDER_PARK;
+            break;
+        case MAV_ICE_TRANSMISSION_GEAR_STATE_REVERSE: /* Reverse for single gear systems or Variable Transmissions. | */
+        case MAV_ICE_TRANSMISSION_GEAR_STATE_REVERSE_1: /* Reverse 1. Implies multiple gears exist. | */
+        case MAV_ICE_TRANSMISSION_GEAR_STATE_REVERSE_2:
+        case MAV_ICE_TRANSMISSION_GEAR_STATE_REVERSE_3:
+            gearOrder = ICE_GEAR_ORDER_REVERSE;
+            break;
+        case MAV_ICE_TRANSMISSION_GEAR_STATE_NEUTRAL: /* Neutral. Engine is physically disconnected. | */
+            gearOrder = ICE_GEAR_ORDER_NEUTRAL;
+            break;
+        case MAV_ICE_TRANSMISSION_GEAR_STATE_FORWARD: /* Forward for single gear systems or Variable Transmissions. | */
+        case MAV_ICE_TRANSMISSION_GEAR_STATE_FORWARD_1: /* First gear. Implies multiple gears exist. | */
+            gearOrder = ICE_GEAR_ORDER_LOWGEAR;
+            break;
+        case MAV_ICE_TRANSMISSION_GEAR_STATE_FORWARD_2: /* Second gear. | */
+        case MAV_ICE_TRANSMISSION_GEAR_STATE_FORWARD_3:
+        case MAV_ICE_TRANSMISSION_GEAR_STATE_FORWARD_4:
+        case MAV_ICE_TRANSMISSION_GEAR_STATE_FORWARD_5:
+        case MAV_ICE_TRANSMISSION_GEAR_STATE_FORWARD_6:
+        case MAV_ICE_TRANSMISSION_GEAR_STATE_FORWARD_7:
+        case MAV_ICE_TRANSMISSION_GEAR_STATE_FORWARD_8:
+        case MAV_ICE_TRANSMISSION_GEAR_STATE_FORWARD_9:
+            gearOrder = ICE_GEAR_ORDER_HIGHGEAR;
+            break;
+        case MAV_ICE_TRANSMISSION_GEAR_STATE_PWM_VALUE:
+        default:
+            gearOrder = ICE_GEAR_ORDER_PARK;
+            break;
+    }
+
+    return gearOrder;
+}
+
 void AP_ICEngine::determine_state()
 {
     RC_Channel *c = rc().channel(start_chan-1);
@@ -828,7 +873,36 @@ void AP_ICEngine::set_output_channels()
         }
     } else {
         // normal operation, set the output
-        SRV_Channels::set_output_pwm(SRV_Channel::k_engine_gear, gear.pwm_active);
+        if (!(options & AP_ICENGINE_OPTIOMS_MASK_GEAR_CTRL_TYPE)) {
+            SRV_Channels::set_output_pwm(SRV_Channel::k_engine_gear, gear.pwm_active);
+        } else {
+            if(gear.state != gear.pending.state) {
+                // get-travel direction.
+                // increase current PWM in that direction
+                AP_ICEngine::enGearOrder_t currentGearOrder = convertGearStateToGearOrder(gear.state);
+                AP_ICEngine::enGearOrder_t targetGearOrder = convertGearStateToGearOrder(gear.pending.state);
+                
+                uint16_t pwmvalue; 
+                SRV_Channels::get_output_pwm(SRV_Channel::k_engine_gear, pwmvalue);
+                if (currentGearOrder < targetGearOrder) {
+                    //moveup
+                    SRV_Channels::get_output_pwm(SRV_Channel::k_engine_gear, gear.pwm_actual);
+                    gear.pwm_actual += gear.pwm_step;
+                    SRV_Channels::set_output_pwm(SRV_Channel::k_engine_gear, gear.pwm_actual);
+                    SRV_Channels::constrain_pwm(SRV_Channel::k_engine_gear);
+                } else if (currentGearOrder > targetGearOrder) {
+                    //movedown
+                    SRV_Channels::get_output_pwm(SRV_Channel::k_engine_gear, gear.pwm_actual);
+                    gear.pwm_actual -= gear.pwm_step;
+                    SRV_Channels::set_output_pwm(SRV_Channel::k_engine_gear, gear.pwm_actual);
+                    SRV_Channels::constrain_pwm(SRV_Channel::k_engine_gear);
+                }
+                // static uint32_t sendtext_timeref;
+                // gcs().send_text_rate_limited(MAV_SEVERITY_INFO, 500, sendtext_timeref,"AP_ICE currgear: %d, tgtGear: %d, pwm: %d, gearpwm: %d, gear.state: %s, gear.pending.state: %s", currentGearOrder, targetGearOrder, pwmvalue, gear.pwm_actual, get_gear_name(gear.state), get_gear_name(gear.pending.state));
+            } 
+        }
+
+        
     }
 
     if (gear.pending.is_active() && state != ICE_OFF) {
@@ -1553,7 +1627,7 @@ void AP_ICEngine::send_status()
     const bool force = force_send_status;
     force_send_status = false;
 
-    bool temp_sent = false, fuel_sent = false, gear_sent = false;
+    bool temp_sent = false, fuel_sent = false, gear_sent = false, awd_sent = false, enghrs_sent = false, engdtc_sent = false, clstrdtc_sent = false, strdtc_sent = false;
 
     const uint8_t chan_mask = GCS_MAVLINK::active_channel_mask();
     for (uint8_t chan=0; chan<MAVLINK_COMM_NUM_BUFFERS; chan++) {
@@ -1635,6 +1709,95 @@ void AP_ICEngine::send_status()
                     current_fuel,
                     0,0);
         }
+
+        uint8_t can_num_drivers = AP::can().get_num_drivers();
+        for (uint8_t i = 0; i < can_num_drivers; i++) {
+            if (AP::can().get_driver_type(i) == AP_CANManager::Driver_Type_PolarisCAN) {
+                    AP_PolarisCAN *ap_plcan = AP_PolarisCAN::get_PolarisCAN(i);
+                    if (ap_plcan == nullptr) {
+                        continue;
+                    }
+                    can_data.awd.fwd_status = ap_plcan->get_FWD_status();
+                    can_data.awd.adc_status = ap_plcan->get_ADC_status();
+                    can_data.engine_hours.engine_hours = ap_plcan->get_engine_hours();
+                    can_data.engine_dtc.dtcdata = ap_plcan->get_engine_dtc();
+                    can_data.cluster_dtc.dtcdata = ap_plcan->get_cluster_dtc();
+                    can_data.steering_dtc.dtcdata = ap_plcan->get_steering_dtc();
+            }
+        }
+
+        const bool send_AWD = force || (now_ms - can_data.awd.last_send_ms >= 1000);
+        if (send_AWD && HAVE_PAYLOAD_SPACE((mavlink_channel_t)chan, COMMAND_LONG)) {
+
+            awd_sent = true;
+            mavlink_msg_command_long_send(
+                    (mavlink_channel_t)chan, 0, 0,
+                    MAV_CMD_ICE_4WD_STATE,
+                    0, // confirmation is unused
+                    can_data.awd.fwd_status, // index
+                    can_data.awd.adc_status,
+                    0, 0, 0, 0,0);
+        }
+
+        const bool send_enghrs = force || (now_ms - can_data.engine_hours.last_send_ms >= 1000);
+        if (send_enghrs && HAVE_PAYLOAD_SPACE((mavlink_channel_t)chan, COMMAND_LONG)) {
+
+            enghrs_sent = true;
+            mavlink_msg_command_long_send(
+                    (mavlink_channel_t)chan, 0, 0,
+                    MAV_CMD_ICE_ENGINE_HOURS,
+                    0, // confirmation is unused
+                    can_data.engine_hours.engine_hours, // index
+                    0, // Odometer Place holder
+                    0, // Trip distance Place holder
+                    0, 0, 0,0);
+        }
+
+        
+        const bool send_engdtc = force || (now_ms - can_data.engine_dtc.last_send_ms >= 1000);
+        if (send_engdtc && HAVE_PAYLOAD_SPACE((mavlink_channel_t)chan, COMMAND_LONG)) {
+            engdtc_sent = true;
+            mavlink_msg_command_long_send(
+                    (mavlink_channel_t)chan, 0, 0,
+                    MAV_CMD_ICE_ENGINE_DTC,
+                    0, // confirmation is unused
+                    can_data.engine_dtc.dtcdata.index, // index
+                    can_data.engine_dtc.dtcdata.u16LightStatus, // Check Engine Light Status
+                    can_data.engine_dtc.dtcdata.u32SPN, // Trip distance Place holder
+                    can_data.engine_dtc.dtcdata.u8FMI,
+                    can_data.engine_dtc.dtcdata.u8OC,
+                    0, 0);
+        }
+
+        const bool send_clusterdtc = force || (now_ms - can_data.cluster_dtc.last_send_ms >= 1000);
+        if (send_clusterdtc && HAVE_PAYLOAD_SPACE((mavlink_channel_t)chan, COMMAND_LONG)) {
+            clstrdtc_sent = true;
+            mavlink_msg_command_long_send(
+                    (mavlink_channel_t)chan, 0, 0,
+                    MAV_CMD_ICE_CLUSTER_DTC,
+                    0, // confirmation is unused
+                    can_data.cluster_dtc.dtcdata.index, // index
+                    can_data.cluster_dtc.dtcdata.u16LightStatus, // Check Engine Light Status
+                    can_data.cluster_dtc.dtcdata.u32SPN, // Trip distance Place holder
+                    can_data.cluster_dtc.dtcdata.u8FMI,
+                    can_data.cluster_dtc.dtcdata.u8OC,
+                    0, 0);
+        }
+
+        const bool send_strdtc = force || (now_ms - can_data.steering_dtc.last_send_ms >= 1000);
+        if (send_strdtc && HAVE_PAYLOAD_SPACE((mavlink_channel_t)chan, COMMAND_LONG)) {
+            strdtc_sent = true;
+            mavlink_msg_command_long_send(
+                    (mavlink_channel_t)chan, 0, 0,
+                    MAV_CMD_ICE_STEERING_DTC,
+                    0, // confirmation is unused
+                    can_data.steering_dtc.dtcdata.index, // index
+                    can_data.steering_dtc.dtcdata.u16LightStatus, // Check Engine Light Status
+                    can_data.steering_dtc.dtcdata.u32SPN, // Trip distance Place holder
+                    can_data.steering_dtc.dtcdata.u8FMI,
+                    can_data.steering_dtc.dtcdata.u8OC,
+                    0, 0);
+        }
     } // for
 
 
@@ -1647,7 +1810,21 @@ void AP_ICEngine::send_status()
     if (fuel_sent) {
         fuel.last_send_ms = now_ms;
     }
-
+    if (awd_sent) {
+        can_data.awd.last_send_ms = now_ms;
+    }
+    if (enghrs_sent) {
+        can_data.engine_hours.last_send_ms = now_ms;
+    }
+    if (engdtc_sent) {
+        can_data.engine_dtc.last_send_ms = now_ms;
+    }
+    if (clstrdtc_sent) {
+        can_data.cluster_dtc.last_send_ms = now_ms;
+    }
+    if (strdtc_sent) {
+        can_data.steering_dtc.last_send_ms = now_ms;
+    }
 }
 
 

@@ -23,6 +23,7 @@
 #include <SRV_Channel/SRV_Channel.h>
 #include <GCS_MAVLink/GCS.h>
 #include <AP_Vehicle/AP_Vehicle_Type.h>
+#include <AP_PolarisCAN/AP_PolarisCAN.h>
 
 // 0000 0000 0000 0101 == 6
 // 0000 0000 0010 1101 == 45
@@ -40,7 +41,7 @@
 #define AP_ICENGINE_OPTIONS_MASK_RPM_FAIL_HAS_TIMER             (1<<7) // yes
 
 #define AP_ICENGINE_OPTIONS_MASK_ARMING_REQUIRED_IGNITION       (1<<8) // no
-
+#define AP_ICENGINE_OPTIOMS_MASK_GEAR_CTRL_TYPE                 (1<<9) // 0 = Original, 1 = w/CAN Feedback
 
 #define AP_ICENGINE_OPTIONS_MASK_DEFAULT                        ( AP_ICENGINE_OPTIONS_MASK_KEEP_RUNNING_WHEN_DISARMED       \
                                                                 | AP_ICENGINE_OPTIONS_MASK_AUTO_ALWAYS_AUTOSTART            \
@@ -144,6 +145,16 @@ private:
     uint32_t state_change_timestamp_ms;
     uint32_t force_staying_in_DELAY_NO_IGNITION_duration_ms;
 
+    typedef enum {
+        ICE_GEAR_ORDER_PARK,
+        ICE_GEAR_ORDER_REVERSE,
+        ICE_GEAR_ORDER_NEUTRAL,
+        ICE_GEAR_ORDER_LOWGEAR,
+        ICE_GEAR_ORDER_HIGHGEAR
+    } enGearOrder_t;
+
+    enGearOrder_t convertGearStateToGearOrder(MAV_ICE_TRANSMISSION_GEAR_STATE gearState);
+
     struct Gear_t {
         AP_Int8 source;
         bool is_forward() { return Gear_t::is_forward(state); }
@@ -192,10 +203,12 @@ private:
 
         enum MAV_ICE_TRANSMISSION_GEAR_STATE state = MAV_ICE_TRANSMISSION_GEAR_STATE_UNKNOWN;
         uint16_t pwm_active;
+        uint16_t pwm_actual;
 
         uint32_t auto_change_debounce;
 
         uint32_t last_send_ms;
+        AP_Int16 pwm_step;
         AP_Int16 pwm_park_up;
         AP_Int16 pwm_park_down;
         AP_Int16 pwm_reverse_up;
@@ -218,6 +231,30 @@ private:
         uint32_t last_sample_ms;
         uint32_t last_send_ms;
     } fuel;
+
+    struct {
+        struct awd_t{
+            AP_PolarisCAN::AP_POLARISCAN_AWD_STATUS fwd_status;
+            AP_PolarisCAN::AP_POLARISCAN_AWD_STATUS adc_status;
+            uint32_t last_send_ms;
+        } awd;
+        struct engine_hours_t{
+            float engine_hours;
+            uint32_t last_send_ms;
+        } engine_hours;
+        struct engine_dtc_t{
+            uint32_t last_send_ms;
+            AP_PolarisCAN::AP_POLARISCAN_DTC dtcdata;
+        } engine_dtc;
+        struct cluster_dtc_t{
+            uint32_t last_send_ms;
+            AP_PolarisCAN::AP_POLARISCAN_DTC dtcdata;
+        } cluster_dtc;
+        struct steering_dtc_t{
+            uint32_t last_send_ms;
+            AP_PolarisCAN::AP_POLARISCAN_DTC dtcdata;
+        } steering_dtc;        
+    } can_data;
 
     // engine temperature for feedback
     struct {
