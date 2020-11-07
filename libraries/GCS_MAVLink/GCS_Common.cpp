@@ -4856,13 +4856,6 @@ bool GCS_MAVLINK::try_send_message(const enum ap_message id)
                     }
                     break;
                 }
-                case AP_CANManager::Driver_Type_PolarisCAN: {
-                    AP_PolarisCAN *ap_PolarisCAN = AP_PolarisCAN::get_PolarisCAN(i);
-                    if (ap_PolarisCAN != nullptr) {
-                        ap_PolarisCAN->send_mavlink(uint8_t(chan));
-                    }
-                    break;
-                }
 #if HAL_PICCOLO_CAN_ENABLE
                 case AP_CANManager::Driver_Type_PiccoloCAN: {
                     AP_PiccoloCAN *ap_pcan = AP_PiccoloCAN::get_pcan(i);
@@ -4879,6 +4872,8 @@ bool GCS_MAVLINK::try_send_message(const enum ap_message id)
                     }
                     break;
                 }
+                // Polaris CAN does not handel ESCs so no telem necesary from here. send_mavlink() called from ICE
+                case AP_CANManager::Driver_Type_PolarisCAN:
                 case AP_CANManager::Driver_Type_None:
                 default:
                     break;

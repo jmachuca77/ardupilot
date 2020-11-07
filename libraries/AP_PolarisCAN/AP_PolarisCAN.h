@@ -21,36 +21,46 @@
 #define PolarisCAN_MAX_NUM_ESCS 12
 
 // Message IDs and Periods, 0 means on demand
+// EEC1 Contains Engine Speed (RPM)
 #define nEEC1_ID      0x0CF00400
 #define nEEC1_PERIOD_MS       20
 
+// ENGTEMP Contains Coolant Temperature
 #define nENGTEMP_ID   0x18FEEE00
 #define nENGTEMP_PERIOD_MS  1180
 
+// DD Contains Fuel Level
 #define nDD_ID        0x18FEFC17
 #define nDD_PERIOD_MS       1180
 
+// TRANS1 Contains Gear Transmission State
 #define nTRANS1_ID    0x18F00500
 #define nTRANS1_PERIOD_MS    110
 
+// FWD Contains Front Wheel Drive Status
 #define nFWD_ID       0x1CFDDF00
 #define nFWD_PERIOD_MS       550
 
+// ADC Contains Automatic Descent Control Status
 #define nADC_ID       0x1CFF6A00
 #define nADC_PERIOD_MS       550
 
+// Contains Total Engine hours and revolutions 
 #define nENGHRS_ID    0x18FEE500
-#define nENGHRS_PERIOD_MS      0
+// Engine hours are requested periodically every 500ms
+#define nENGHRS_PERIOD_MS    500
 
+// These messages contain the Diagnostic Trouble Codes
 #define nDDDTC_ID     0x18FECA17
-#define nDDDTC_PERIOD_MS       1
+#define nDDDTC_PERIOD_MS    1000
 
 #define nENGDTC_ID    0x18FECA00
-#define nENGDTC_PERIOD_MS      1
+#define nENGDTC_PERIOD_MS   1000
 
 #define nSTRDTC_ID    0x18FECA13
-#define nSTRDTC_PERIOD_MS      1
+#define nSTRDTC_PERIOD_MS   1000
 
+// VHDR contains odometer and trip distance
 #define nVDHR_ID      0x18FEC117
 #define nVDHR_PERIOD_MS     1100
 
@@ -78,6 +88,21 @@ public:
     // Currently not Used
     void update();
 
+    typedef enum {
+        NOTENGAGED          = 0,
+        ENGAGED             = 1,
+        ERROR               = 2,
+        NOTAVAILABLE        = 3
+    } AP_POLARISCAN_AWD_STATUS;
+
+    typedef struct {
+        uint8_t  index;
+        uint32_t u32SPN;
+        uint8_t  u8FMI;
+        uint8_t  u8OC;
+        uint16_t u16LightStatus;
+    } AP_POLARISCAN_DTC;
+
     // Called from AP_RPM when using PolarisCAN type
     uint32_t get_current_rpm();
 
@@ -85,6 +110,13 @@ public:
     MAV_ICE_TRANSMISSION_GEAR_STATE get_current_gear();
     float get_coolant_temp();
     float get_fuel_level();
+    AP_POLARISCAN_AWD_STATUS get_FWD_status();
+    AP_POLARISCAN_AWD_STATUS get_ADC_status();
+    float get_engine_hours();
+    AP_POLARISCAN_DTC get_engine_dtc();
+    AP_POLARISCAN_DTC get_cluster_dtc();
+    AP_POLARISCAN_DTC get_steering_dtc();
+
 
     // send ESC telemetry messages over MAVLink
     void send_mavlink(uint8_t mav_chan);
@@ -102,10 +134,7 @@ private:
 
     static const uint16_t PolarisCAN_SEND_TIMEOUT_US;
 
-    // telemetry definitions
-    static constexpr uint32_t EX_CAN_ESC_UPDATE_MS = 100;
-
-    // loop to send output to ESCs in background thread
+    // loop function to contain all the cyclic routines for this module
     void loop();
 
     // write frame on CAN bus, returns true on success
@@ -120,9 +149,10 @@ private:
     AP_HAL::CANIface* _can_iface;
     HAL_EventHandle _event_handle;
 
-    // telemetry data (rpm, voltage)
+    // Semaphore to protect access to message data structures
     HAL_Semaphore _data_sem;
 
+    // Structure to store information from the EEC1 CAN Message
     struct EEC1_data_t {
         uint32_t u32lastRecvFrameTime;
         bool     boMessageTimeout;
@@ -162,25 +192,11 @@ private:
         uint8_t  u8gear;
     } _TRANS1_data;
 
-    enum FWDStatus {
-        FWD_NOTENGAGED      = 0x00,
-        FWD_ENGAGED         = 0x01,
-        FWD_ERROR           = 0x10,
-        FWD_NOTAVAILABLE    = 0x11
-    } FWDStatus;
-
     struct FWD_data_t {
         uint32_t u32lastRecvFrameTime;
         bool     boMessageTimeout;
         uint8_t  u8FWDActStatus;
     } _FWD_data;
-
-    enum ADCStatus {
-        ADC_NOTENGAGED      = 0x00,
-        ADC_ENGAGED         = 0x01,
-        ADC_ERROR           = 0x10,
-        ADC_NOTAVAILABLE    = 0x11
-    } ADCStatus;
 
     enum SwStatus {
         SW_NEUTRAL       = 0x0,
@@ -208,6 +224,7 @@ private:
         uint32_t u32SPN;
         uint8_t  u8FMI;
         uint8_t  u8OC;
+        uint16_t u16WarningLightStatus;
     } _STRDTC_data;
 
     struct DDDTC_data_t {
@@ -216,6 +233,7 @@ private:
         uint32_t u32SPN;
         uint8_t  u8FMI;
         uint8_t  u8OC;
+        uint16_t u16WarningLightStatus;
     } _DDDTC_data;
 
     struct ENGDTC_data_t {
@@ -224,6 +242,7 @@ private:
         uint32_t u32SPN;
         uint8_t  u8FMI;
         uint8_t  u8OC;
+        uint16_t u16WarningLightStatus;
     } _ENGDTC_data;
 
     struct VDHR_data_t {
@@ -243,5 +262,6 @@ private:
         uint8_t data[3];
     };
 
+    // CAN message frame for Requesting Engine hours from J1939
     AP_HAL::CANFrame req_eng_hours_frame;
 };

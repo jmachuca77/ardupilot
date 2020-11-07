@@ -239,6 +239,7 @@ void AP_PolarisCAN::loop()
                     _STRDTC_data.u32SPN                   = (((recv_frame.data[4] & 0xE0) >> 5) << 16) + (recv_frame.data[3] << 8) + (recv_frame.data[2]);
                     _STRDTC_data.u8FMI                    = recv_frame.data[4] & 0x1F;
                     _STRDTC_data.u8OC                     = recv_frame.data[5] & 0x7F;
+                    _STRDTC_data.u16WarningLightStatus    = (recv_frame.data[1] << 8) + (recv_frame.data[0]);
                     // gcs().send_text(MAV_SEVERITY_INFO, "RZRCAN STRDTC FMI: %d [0x%X] SPN: %ld [0x%lX] OC: %d [0x%X]", _STRDTC_data.u8FMI, _STRDTC_data.u8FMI, _STRDTC_data.u32SPN, _STRDTC_data.u32SPN, _STRDTC_data.u8OC, _STRDTC_data.u8OC);
                 break;    
 
@@ -248,6 +249,7 @@ void AP_PolarisCAN::loop()
                     _DDDTC_data.u32SPN                   = (((recv_frame.data[4] & 0xE0) >> 5) << 16) + (recv_frame.data[3] << 8) + (recv_frame.data[2]);
                     _DDDTC_data.u8FMI                    = recv_frame.data[4] & 0x1F;
                     _DDDTC_data.u8OC                     = recv_frame.data[5] & 0x7F;
+                    _DDDTC_data.u16WarningLightStatus    = (recv_frame.data[1] << 8) + (recv_frame.data[0]);
                     // gcs().send_text(MAV_SEVERITY_INFO, "RZRCAN DDDTC FMI: %d [0x%X] SPN: %ld [0x%lX] OC: %d [0x%X]", _DDDTC_data.u8FMI, _DDDTC_data.u8FMI, _DDDTC_data.u32SPN, _DDDTC_data.u32SPN, _DDDTC_data.u8OC, _DDDTC_data.u8OC);
                 break;    
 
@@ -257,6 +259,7 @@ void AP_PolarisCAN::loop()
                     _ENGDTC_data.u32SPN                  = (((recv_frame.data[4] & 0xE0) >> 5) << 16) + (recv_frame.data[3] << 8) + (recv_frame.data[2]);
                     _ENGDTC_data.u8FMI                   = recv_frame.data[4] & 0x1F;
                     _ENGDTC_data.u8OC                    = recv_frame.data[5] & 0x7F;
+                    _ENGDTC_data.u16WarningLightStatus   = (recv_frame.data[1] << 8) + (recv_frame.data[0]);
                     // gcs().send_text(MAV_SEVERITY_INFO, "RZRCAN ENGDTC FMI: %d [0x%X] SPN: %ld [0x%lX] OC: %d [0x%X]", _ENGDTC_data.u8FMI, _ENGDTC_data.u8FMI, _ENGDTC_data.u32SPN, _ENGDTC_data.u32SPN, _ENGDTC_data.u8OC, _ENGDTC_data.u8OC);
                 break;    
 
@@ -267,7 +270,7 @@ void AP_PolarisCAN::loop()
                     _VDHR_data.boMessageTimeout          = false;
                     _VDHR_data.fOdometer                 = rawOdom * 0.005;
                     _VDHR_data.fTripDistance             = rawTrip * 0.005;
-                    gcs().send_text(MAV_SEVERITY_INFO, "RZRCAN Odom: %0.2f [0x%X] Trip: %0.2f [0x%X]", _VDHR_data.fOdometer, rawOdom, _VDHR_data.fTripDistance, rawTrip);
+                    // gcs().send_text(MAV_SEVERITY_INFO, "RZRCAN Odom: %0.2f [0x%lX] Trip: %0.2f [0x%lX]", _VDHR_data.fOdometer, rawOdom, _VDHR_data.fTripDistance, rawTrip);
                 break;                
             };
         }
@@ -355,6 +358,81 @@ float AP_PolarisCAN::get_fuel_level() {
     }
     
 }
+AP_PolarisCAN::AP_POLARISCAN_AWD_STATUS AP_PolarisCAN::get_FWD_status() {
+    uint32_t now_ms = AP_HAL::millis();
+    WITH_SEMAPHORE(_data_sem);
+    if ((now_ms - _FWD_data.u32lastRecvFrameTime > 2*nFWD_PERIOD_MS) && (!_FWD_data.boMessageTimeout)){
+        _FWD_data.u8FWDActStatus = NOTAVAILABLE;
+        _FWD_data.boMessageTimeout = true;
+    }
+    return (AP_POLARISCAN_AWD_STATUS)_FWD_data.u8FWDActStatus ;
+};
+
+AP_PolarisCAN::AP_POLARISCAN_AWD_STATUS AP_PolarisCAN::get_ADC_status() {
+    uint32_t now_ms = AP_HAL::millis();
+    WITH_SEMAPHORE(_data_sem);
+    if ((now_ms - _ADC_data.u32lastRecvFrameTime > 2*nADC_PERIOD_MS) && (!_ADC_data.boMessageTimeout)){
+        _ADC_data.u8ADCActStatus = NOTAVAILABLE;
+        _ADC_data.boMessageTimeout = true;
+    }
+    return (AP_POLARISCAN_AWD_STATUS)_ADC_data.u8ADCActStatus ;
+};
+
+float AP_PolarisCAN::get_engine_hours() {
+    uint32_t now_ms = AP_HAL::millis();
+    WITH_SEMAPHORE(_data_sem);
+    if ((now_ms - _ENGHRS_data.u32lastRecvFrameTime > 2*nENGTEMP_PERIOD_MS) && (!_ENGHRS_data.boMessageTimeout)){
+        _ENGHRS_data.fTotalEngineHours = -1;
+        _ENGHRS_data.boMessageTimeout = true;
+    }
+    return (float)_ENGHRS_data.fTotalEngineHours;
+};
+
+AP_PolarisCAN::AP_POLARISCAN_DTC AP_PolarisCAN::get_engine_dtc() {
+    uint32_t now_ms = AP_HAL::millis();
+    AP_PolarisCAN::AP_POLARISCAN_DTC stDTC;
+    WITH_SEMAPHORE(_data_sem);
+    if ((now_ms - _ENGDTC_data.u32lastRecvFrameTime > 2*nENGDTC_PERIOD_MS) && (!_ENGDTC_data.boMessageTimeout)){
+        _ENGDTC_data.boMessageTimeout = true;
+    }
+    stDTC.index             = 0;
+    stDTC.u32SPN            = _ENGDTC_data.u32SPN;
+    stDTC.u8FMI             = _ENGDTC_data.u8FMI;
+    stDTC.u8OC              = _ENGDTC_data.u8OC;
+    stDTC.u16LightStatus    = _ENGDTC_data.u16WarningLightStatus;
+    return stDTC;
+};
+
+AP_PolarisCAN::AP_POLARISCAN_DTC AP_PolarisCAN::get_cluster_dtc(){
+    uint32_t now_ms = AP_HAL::millis();
+    AP_PolarisCAN::AP_POLARISCAN_DTC stDTC;
+    WITH_SEMAPHORE(_data_sem);
+    if ((now_ms - _DDDTC_data.u32lastRecvFrameTime > 2*nDDDTC_PERIOD_MS) && (!_DDDTC_data.boMessageTimeout)){
+        _DDDTC_data.boMessageTimeout = true;
+    }
+    stDTC.index             = 0;
+    stDTC.u32SPN            = _DDDTC_data.u32SPN;
+    stDTC.u8FMI             = _DDDTC_data.u8FMI;
+    stDTC.u8OC              = _DDDTC_data.u8OC;
+    stDTC.u16LightStatus    = _DDDTC_data.u16WarningLightStatus;
+    return stDTC;
+};
+
+AP_PolarisCAN::AP_POLARISCAN_DTC AP_PolarisCAN::get_steering_dtc(){
+    uint32_t now_ms = AP_HAL::millis();
+    AP_PolarisCAN::AP_POLARISCAN_DTC stDTC;
+    WITH_SEMAPHORE(_data_sem);
+    if ((now_ms - _STRDTC_data.u32lastRecvFrameTime > 2*nSTRDTC_PERIOD_MS) && (!_STRDTC_data.boMessageTimeout)){
+        _STRDTC_data.boMessageTimeout = true;
+    }
+    stDTC.index             = 0;
+    stDTC.u32SPN            = _STRDTC_data.u32SPN;
+    stDTC.u8FMI             = _STRDTC_data.u8FMI;
+    stDTC.u8OC              = _STRDTC_data.u8OC;
+    stDTC.u16LightStatus    = _STRDTC_data.u16WarningLightStatus;
+    return stDTC;
+};
+
 
 MAV_ICE_TRANSMISSION_GEAR_STATE AP_PolarisCAN::get_current_gear() {
     uint32_t now_ms = AP_HAL::millis();
@@ -397,6 +475,8 @@ MAV_ICE_TRANSMISSION_GEAR_STATE AP_PolarisCAN::get_current_gear() {
 // send ESC telemetry messages over MAVLink
 void AP_PolarisCAN::send_mavlink(uint8_t mav_chan)
 {
+    static uint32_t sendtext_timeref;
+    gcs().send_text_rate_limited(MAV_SEVERITY_INFO, 500, sendtext_timeref,"PolarisCAN send mavlink");
     // output telemetry messages
     {
         // take semaphore to access telemetry data
