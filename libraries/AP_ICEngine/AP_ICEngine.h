@@ -242,6 +242,10 @@ private:
             float engine_hours;
             uint32_t last_send_ms;
         } engine_hours;
+        struct odometer_t{
+            float fOdometer;
+            float fTripDistance;
+        } odometer;
         struct engine_dtc_t{
             uint32_t last_send_ms;
             AP_PolarisCAN::AP_POLARISCAN_DTC dtcdata;

@@ -1720,6 +1720,8 @@ void AP_ICEngine::send_status()
                     can_data.awd.fwd_status = ap_plcan->get_FWD_status();
                     can_data.awd.adc_status = ap_plcan->get_ADC_status();
                     can_data.engine_hours.engine_hours = ap_plcan->get_engine_hours();
+                    can_data.odometer.fOdometer = ap_plcan->get_odometer();
+                    can_data.odometer.fTripDistance = ap_plcan->get_tripDistance();
                     can_data.engine_dtc.dtcdata = ap_plcan->get_engine_dtc();
                     can_data.cluster_dtc.dtcdata = ap_plcan->get_cluster_dtc();
                     can_data.steering_dtc.dtcdata = ap_plcan->get_steering_dtc();
@@ -1748,8 +1750,8 @@ void AP_ICEngine::send_status()
                     MAV_CMD_ICE_ENGINE_HOURS,
                     0, // confirmation is unused
                     can_data.engine_hours.engine_hours, // index
-                    0, // Odometer Place holder
-                    0, // Trip distance Place holder
+                    can_data.odometer.fOdometer, // Odometer Place holder
+                    can_data.odometer.fTripDistance, // Trip distance Place holder
                     0, 0, 0,0);
         }
 
