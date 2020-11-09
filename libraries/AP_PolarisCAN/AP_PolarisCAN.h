@@ -116,6 +116,8 @@ public:
     AP_POLARISCAN_DTC get_engine_dtc();
     AP_POLARISCAN_DTC get_cluster_dtc();
     AP_POLARISCAN_DTC get_steering_dtc();
+    float get_odometer();
+    float get_tripDistance();
 
 
     // send ESC telemetry messages over MAVLink

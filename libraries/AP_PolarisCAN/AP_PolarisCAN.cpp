@@ -33,6 +33,7 @@ extern const AP_HAL::HAL& hal;
 
 #define debug_can(level_debug, fmt, args...) do { AP::can().log_text(level_debug, "PolarisCAN",  fmt, #args); } while (0)
 #define AP_POLARISCAN_FUEL_LEVEL_INVALID      -1
+#define AP_POLARISCAN_ODOMETER_INVALID        -1
 
 // stupid compiler is not able to optimise this under gnu++11
 // move this back when moving to gnu++17
@@ -147,6 +148,19 @@ void AP_PolarisCAN::loop()
             }
         }
 
+        // static uint32_t dtcreqtime;
+        // if ((AP_HAL::millis() - dtcreqtime) > nENG_HOUR_REQ_INTERVAL) {
+        //     dtcreqtime = AP_HAL::millis();
+        //     // gcs().send_text(MAV_SEVERITY_INFO, "RZRCAN: Requesting Engine Hours");
+        //     req_eng_hours_cmd_t req_eng_hours_cmd;
+        //     req_eng_hours_cmd.data1 = 0xCC;
+        //     req_eng_hours_cmd.data2 = 0xFE;
+        //     req_eng_hours_cmd.data3 = 0x00;
+        //     req_eng_hours_frame = {(0x18EA009E | AP_HAL::CANFrame::FlagEFF), req_eng_hours_cmd.data, sizeof(req_eng_hours_cmd.data)};
+        //     if (!write_frame(req_eng_hours_frame, timeout)) {
+        //         continue;
+        //     }
+        // }
 
         while (read_frame(recv_frame, timeout)) {
             uint32_t frameID = recv_frame.id & recv_frame.MaskExtID;
@@ -358,6 +372,31 @@ float AP_PolarisCAN::get_fuel_level() {
     }
     
 }
+
+float AP_PolarisCAN::get_odometer() {
+    uint32_t now_ms = AP_HAL::millis();
+    WITH_SEMAPHORE(_data_sem);
+    if ((now_ms - _VDHR_data.u32lastRecvFrameTime > 2*nVDHR_PERIOD_MS) && (!_VDHR_data.boMessageTimeout)){
+        _VDHR_data.fOdometer = AP_POLARISCAN_ODOMETER_INVALID;
+        _VDHR_data.fTripDistance = AP_POLARISCAN_ODOMETER_INVALID;
+        _VDHR_data.boMessageTimeout = true;
+    }
+    
+    return _VDHR_data.fOdometer;
+}
+
+float AP_PolarisCAN::get_tripDistance() {
+    uint32_t now_ms = AP_HAL::millis();
+    WITH_SEMAPHORE(_data_sem);
+    if ((now_ms - _VDHR_data.u32lastRecvFrameTime > 2*nVDHR_PERIOD_MS) && (!_VDHR_data.boMessageTimeout)){
+        _VDHR_data.fOdometer = AP_POLARISCAN_ODOMETER_INVALID;
+        _VDHR_data.fTripDistance = AP_POLARISCAN_ODOMETER_INVALID;
+        _VDHR_data.boMessageTimeout = true;
+    }
+    
+    return _VDHR_data.fTripDistance;
+}
+
 AP_PolarisCAN::AP_POLARISCAN_AWD_STATUS AP_PolarisCAN::get_FWD_status() {
     uint32_t now_ms = AP_HAL::millis();
     WITH_SEMAPHORE(_data_sem);
