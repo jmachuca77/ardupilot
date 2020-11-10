@@ -134,11 +134,10 @@ void AP_PolarisCAN::loop()
         timeout = AP_HAL::native_micros64() + timeout_us;
 
         static uint32_t lastSentTime;
-
         if ((AP_HAL::millis() - lastSentTime) > nENG_HOUR_REQ_INTERVAL) {
             lastSentTime = AP_HAL::millis();
             // gcs().send_text(MAV_SEVERITY_INFO, "RZRCAN: Requesting Engine Hours");
-            req_eng_hours_cmd_t req_eng_hours_cmd;
+            req_cmd_t req_eng_hours_cmd;
             req_eng_hours_cmd.data1 = 0xE5;
             req_eng_hours_cmd.data2 = 0xFE;
             req_eng_hours_cmd.data3 = 0x00;
@@ -148,19 +147,19 @@ void AP_PolarisCAN::loop()
             }
         }
 
-        // static uint32_t dtcreqtime;
-        // if ((AP_HAL::millis() - dtcreqtime) > nENG_HOUR_REQ_INTERVAL) {
-        //     dtcreqtime = AP_HAL::millis();
-        //     // gcs().send_text(MAV_SEVERITY_INFO, "RZRCAN: Requesting Engine Hours");
-        //     req_eng_hours_cmd_t req_eng_hours_cmd;
-        //     req_eng_hours_cmd.data1 = 0xCC;
-        //     req_eng_hours_cmd.data2 = 0xFE;
-        //     req_eng_hours_cmd.data3 = 0x00;
-        //     req_eng_hours_frame = {(0x18EA009E | AP_HAL::CANFrame::FlagEFF), req_eng_hours_cmd.data, sizeof(req_eng_hours_cmd.data)};
-        //     if (!write_frame(req_eng_hours_frame, timeout)) {
-        //         continue;
-        //     }
-        // }
+        static uint32_t lastDTCReqTime;
+        if ((AP_HAL::millis() - lastDTCReqTime) > nSTORED_DTC_REQ_INTERVAL) {
+            lastDTCReqTime = AP_HAL::millis();
+            // gcs().send_text(MAV_SEVERITY_INFO, "RZRCAN: Requesting Engine Hours");
+            req_cmd_t req_stored_dtc_cmd;
+            req_stored_dtc_cmd.data1 = 0xCB;
+            req_stored_dtc_cmd.data2 = 0xFE;
+            req_stored_dtc_cmd.data3 = 0x00;
+            req_stored_dtcs_frame = {(0x18EAFF9E | AP_HAL::CANFrame::FlagEFF), req_stored_dtc_cmd.data, sizeof(req_stored_dtc_cmd.data)};
+            if (!write_frame(req_stored_dtcs_frame, timeout)) {
+                continue;
+            }
+        }
 
         while (read_frame(recv_frame, timeout)) {
             uint32_t frameID = recv_frame.id & recv_frame.MaskExtID;
@@ -285,7 +284,38 @@ void AP_PolarisCAN::loop()
                     _VDHR_data.fOdometer                 = rawOdom * 0.005;
                     _VDHR_data.fTripDistance             = rawTrip * 0.005;
                     // gcs().send_text(MAV_SEVERITY_INFO, "RZRCAN Odom: %0.2f [0x%lX] Trip: %0.2f [0x%lX]", _VDHR_data.fOdometer, rawOdom, _VDHR_data.fTripDistance, rawTrip);
-                break;                
+                break;   
+
+                case nDDSTDTC_ID:
+                case nSTRSTDTC_ID:
+                case nENGSTDTC_ID:
+                    tDTC recievedDTC;
+                    recievedDTC.u32SPN                  = (((recv_frame.data[4] & 0xE0) >> 5) << 16) + (recv_frame.data[3] << 8) + (recv_frame.data[2]);
+                    recievedDTC.u8FMI                   = recv_frame.data[4] & 0x1F;
+                    recievedDTC.u8OC                    = recv_frame.data[5] & 0x7F;
+                    recievedDTC.u16LightStatus          = (recv_frame.data[1] << 8) + (recv_frame.data[0]);
+
+                    
+                    static uint8_t lastDTCIndex = 0;
+                    uint8_t DTCIndex = lastDTCIndex;
+                    for (uint8_t dtc=0; dtc<sizeof(STORED_DTC_ARRAY); dtc++) {
+                        if (recievedDTC.u32SPN == STORED_DTC_ARRAY[dtc].u32SPN) {
+                            DTCIndex = dtc;
+                        }   
+                    }
+
+                    STORED_DTC_ARRAY[DTCIndex].index            = 0;
+                    STORED_DTC_ARRAY[DTCIndex].u16LightStatus   = recievedDTC.u16LightStatus;
+                    STORED_DTC_ARRAY[DTCIndex].u32SPN           = recievedDTC.u32SPN;
+                    STORED_DTC_ARRAY[DTCIndex].u8FMI            = recievedDTC.u8FMI;
+                    STORED_DTC_ARRAY[DTCIndex].u8OC             = recievedDTC.u8OC;
+                    if (DTCIndex == lastDTCIndex) {
+                        lastDTCIndex++;
+                        if (lastDTCIndex >= sizeof(STORED_DTC_ARRAY)) {
+                            lastDTCIndex = 0;
+                        };
+                    };
+                break;             
             };
         }
     }
@@ -327,6 +357,36 @@ bool AP_PolarisCAN::read_frame(AP_HAL::CANFrame &recv_frame, uint64_t timeout)
 
     // read frame and return success
     return (_can_iface->receive(recv_frame, time, flags) == 1);
+}
+
+void AP_PolarisCAN::sendClearDTCs() {
+    const uint32_t timeout_us = MIN(AP::scheduler().get_loop_period_us(), PolarisCAN_SEND_TIMEOUT_US);
+    uint64_t timeout = AP_HAL::native_micros64() + timeout_us;
+    req_cmd_t clear_dtcs_cmd;
+    clear_dtcs_cmd.data1 = 0xD3;
+    clear_dtcs_cmd.data2 = 0xFE;
+    clear_dtcs_cmd.data3 = 0x00;
+    clear_dtcs_frame = {(0x18EAFF9E | AP_HAL::CANFrame::FlagEFF), clear_dtcs_cmd.data, sizeof(clear_dtcs_cmd.data)};
+    write_frame(clear_dtcs_frame, timeout);
+}
+
+void AP_PolarisCAN::sendClearStoredDTCs() {
+    const uint32_t timeout_us = MIN(AP::scheduler().get_loop_period_us(), PolarisCAN_SEND_TIMEOUT_US);
+    uint64_t timeout = AP_HAL::native_micros64() + timeout_us;
+    req_cmd_t clear_dtcs_cmd;
+    clear_dtcs_cmd.data1 = 0xCC;
+    clear_dtcs_cmd.data2 = 0xFE;
+    clear_dtcs_cmd.data3 = 0x00;
+    clear_dtcs_frame = {(0x18EAFF9E | AP_HAL::CANFrame::FlagEFF), clear_dtcs_cmd.data, sizeof(clear_dtcs_cmd.data)};
+    write_frame(clear_dtcs_frame, timeout);
+    // Clear internal Array
+    for (uint8_t dtc=0; dtc<sizeof(STORED_DTC_ARRAY); dtc++) {
+        STORED_DTC_ARRAY[dtc].index            = 0;
+        STORED_DTC_ARRAY[dtc].u16LightStatus   = 0;
+        STORED_DTC_ARRAY[dtc].u32SPN           = 0;
+        STORED_DTC_ARRAY[dtc].u8FMI            = 0;
+        STORED_DTC_ARRAY[dtc].u8OC             = 0;
+    }
 }
 
 // called from SRV_Channels

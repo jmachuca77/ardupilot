@@ -52,12 +52,15 @@
 
 // These messages contain the Diagnostic Trouble Codes
 #define nDDDTC_ID     0x18FECA17
+#define nDDSTDTC_ID   0x18FECB17
 #define nDDDTC_PERIOD_MS    1000
 
 #define nENGDTC_ID    0x18FECA00
+#define nENGSTDTC_ID  0x18FECB00
 #define nENGDTC_PERIOD_MS   1000
 
 #define nSTRDTC_ID    0x18FECA13
+#define nSTRSTDTC_ID  0x18FECB13
 #define nSTRDTC_PERIOD_MS   1000
 
 // VHDR contains odometer and trip distance
@@ -65,6 +68,7 @@
 #define nVDHR_PERIOD_MS     1100
 
 #define nENG_HOUR_REQ_INTERVAL 500
+#define nSTORED_DTC_REQ_INTERVAL 60000
 
 class CANTester;
 
@@ -87,6 +91,8 @@ public:
 
     // Currently not Used
     void update();
+    void sendClearDTCs();
+    void sendClearStoredDTCs();
 
     typedef enum {
         NOTENGAGED          = 0,
@@ -95,7 +101,7 @@ public:
         NOTAVAILABLE        = 3
     } AP_POLARISCAN_AWD_STATUS;
 
-    typedef struct {
+    typedef struct tDTC {
         uint8_t  index;
         uint32_t u32SPN;
         uint8_t  u8FMI;
@@ -254,8 +260,10 @@ private:
         float    fTripDistance;
     } _VDHR_data;
 
-    // structure for sending Engine Hours Request
-    union req_eng_hours_cmd_t {
+    struct tDTC STORED_DTC_ARRAY[10];
+
+    // structure for sending a Request command
+    union req_cmd_t {
         struct PACKED {
             uint8_t data1;
             uint8_t data2;
@@ -266,4 +274,6 @@ private:
 
     // CAN message frame for Requesting Engine hours from J1939
     AP_HAL::CANFrame req_eng_hours_frame;
+    AP_HAL::CANFrame req_stored_dtcs_frame;
+    AP_HAL::CANFrame clear_dtcs_frame;
 };
