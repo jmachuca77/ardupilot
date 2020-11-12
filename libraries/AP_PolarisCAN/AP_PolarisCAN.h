@@ -70,6 +70,7 @@
 #define nENG_HOUR_REQ_INTERVAL 500
 #define nSTORED_DTC_REQ_INTERVAL 60000
 
+#define nSIZE_OF_DTC_ARRAY 10
 class CANTester;
 
 class AP_PolarisCAN : public AP_CANDriver {
@@ -260,7 +261,7 @@ private:
         float    fTripDistance;
     } _VDHR_data;
 
-    struct tDTC STORED_DTC_ARRAY[10];
+    struct tDTC STORED_DTC_ARRAY[nSIZE_OF_DTC_ARRAY];
 
     // structure for sending a Request command
     union req_cmd_t {
