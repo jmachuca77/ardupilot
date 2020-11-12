@@ -122,7 +122,13 @@ for t in $CI_BUILD_TARGET; do
         run_autotest "Copter" "build.Copter" "test.CopterTests2b"
         continue
     fi
-
+    if [ "$t" == "sitltest-can" ]; then
+        echo "Building navigator"
+        $waf configure --board sitl
+        $waf copter
+        run_autotest "Copter" "build.SITLPeriphGPS" "test.CAN"
+        continue
+    fi
     if [ "$t" == "sitltest-plane" ]; then
         run_autotest "Plane" "build.Plane" "test.Plane"
         continue
@@ -225,6 +231,18 @@ for t in $CI_BUILD_TARGET; do
         echo "Building navigator"
         $waf configure --board navigator --toolchain=arm-linux-musleabihf
         $waf sub --static
+        continue
+    fi
+
+    if [ "$t" == "replay" ]; then
+        echo "Building replay"
+        $waf configure --board linux --disable-scripting
+        $way --target tools/Replay
+        echo "Building AP_DAL standalone test"
+        $waf configure --board linux --disable-scripting --disable-gcs
+        $way --target tools/AP_DAL_Standalone
+        $waf clean
+        $waf bootloader
         continue
     fi
 

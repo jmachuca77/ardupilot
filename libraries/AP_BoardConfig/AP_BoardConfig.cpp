@@ -64,7 +64,7 @@
 #endif
 
 #ifndef HAL_BRD_OPTIONS_DEFAULT
-#if CONFIG_HAL_BOARD == HAL_BOARD_CHIBIOS && !APM_BUILD_TYPE(APM_BUILD_UNKNOWN)
+#if CONFIG_HAL_BOARD == HAL_BOARD_CHIBIOS && !APM_BUILD_TYPE(APM_BUILD_UNKNOWN) && !APM_BUILD_TYPE(APM_BUILD_Replay)
 #define HAL_BRD_OPTIONS_DEFAULT BOARD_OPTION_WATCHDOG
 #else
 #define HAL_BRD_OPTIONS_DEFAULT 0
@@ -382,7 +382,7 @@ void AP_BoardConfig::config_error(const char *fmt, ...)
     uint32_t last_print_ms = 0;
     while (true) {
         uint32_t now = AP_HAL::millis();
-        if (now - last_print_ms >= 3000) {
+        if (now - last_print_ms >= 5000) {
             last_print_ms = now;
             va_list arg_list;
             char printfmt[MAVLINK_MSG_STATUSTEXT_FIELD_TEXT_LEN+2];
