@@ -2174,6 +2174,8 @@ MAV_RESULT GCS_MAVLINK::_set_mode_common(const MAV_MODE _base_mode, const uint32
     if (uint32_t(_base_mode) & MAV_MODE_FLAG_CUSTOM_MODE_ENABLED) {
         if (AP::vehicle()->set_mode(_custom_mode, ModeReason::GCS_COMMAND)) {
             result = MAV_RESULT_ACCEPTED;
+        } else {
+            result = MAV_RESULT_FAILED;
         }
     } else if (_base_mode == (MAV_MODE)MAV_MODE_FLAG_DECODE_POSITION_SAFETY) {
         // set the safety switch position. Must be in a command by itself
@@ -2185,6 +2187,8 @@ MAV_RESULT GCS_MAVLINK::_set_mode_common(const MAV_MODE _base_mode, const uint32
             // turn safety on (no pwm outputs to the motors)
             if (hal.rcout->force_safety_on()) {
                 result = MAV_RESULT_ACCEPTED;
+            } else {
+                result = MAV_RESULT_FAILED;
             }
         }
     }
