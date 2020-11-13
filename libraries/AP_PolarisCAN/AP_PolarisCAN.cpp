@@ -134,7 +134,7 @@ void AP_PolarisCAN::loop()
         timeout = AP_HAL::native_micros64() + timeout_us;
 
         static uint32_t lastSentTime;
-        if ((AP_HAL::millis() - lastSentTime) > nENG_HOUR_REQ_INTERVAL) {
+        if (((AP_HAL::millis() - lastSentTime) > nENG_HOUR_REQ_INTERVAL) || (_ENGHRS_data.boMessageTimeout)) {
             lastSentTime = AP_HAL::millis();
             // gcs().send_text(MAV_SEVERITY_INFO, "RZRCAN: Requesting Engine Hours");
             req_cmd_t req_eng_hours_cmd;
@@ -143,20 +143,6 @@ void AP_PolarisCAN::loop()
             req_eng_hours_cmd.data3 = 0x00;
             req_eng_hours_frame = {(0x18EA009E | AP_HAL::CANFrame::FlagEFF), req_eng_hours_cmd.data, sizeof(req_eng_hours_cmd.data)};
             if (!write_frame(req_eng_hours_frame, timeout)) {
-                continue;
-            }
-        }
-
-        static uint32_t lastDTCReqTime;
-        if ((AP_HAL::millis() - lastDTCReqTime) > nSTORED_DTC_REQ_INTERVAL) {
-            lastDTCReqTime = AP_HAL::millis();
-            // gcs().send_text(MAV_SEVERITY_INFO, "RZRCAN: Requesting Engine Hours");
-            req_cmd_t req_stored_dtc_cmd;
-            req_stored_dtc_cmd.data1 = 0xCB;
-            req_stored_dtc_cmd.data2 = 0xFE;
-            req_stored_dtc_cmd.data3 = 0x00;
-            req_stored_dtcs_frame = {(0x18EAFF9E | AP_HAL::CANFrame::FlagEFF), req_stored_dtc_cmd.data, sizeof(req_stored_dtc_cmd.data)};
-            if (!write_frame(req_stored_dtcs_frame, timeout)) {
                 continue;
             }
         }
@@ -361,6 +347,17 @@ bool AP_PolarisCAN::read_frame(AP_HAL::CANFrame &recv_frame, uint64_t timeout)
     return (_can_iface->receive(recv_frame, time, flags) == 1);
 }
 
+void AP_PolarisCAN::sendGetStoredDTCs() {
+    const uint32_t timeout_us = MIN(AP::scheduler().get_loop_period_us(), PolarisCAN_SEND_TIMEOUT_US);
+    uint64_t timeout = AP_HAL::native_micros64() + timeout_us;
+    req_cmd_t req_stored_dtc_cmd;
+    req_stored_dtc_cmd.data1 = 0xCB;
+    req_stored_dtc_cmd.data2 = 0xFE;
+    req_stored_dtc_cmd.data3 = 0x00;
+    req_stored_dtcs_frame = {(0x18EAFF9E | AP_HAL::CANFrame::FlagEFF), req_stored_dtc_cmd.data, sizeof(req_stored_dtc_cmd.data)};
+    write_frame(req_stored_dtcs_frame, timeout);
+}
+
 void AP_PolarisCAN::sendClearDTCs() {
     const uint32_t timeout_us = MIN(AP::scheduler().get_loop_period_us(), PolarisCAN_SEND_TIMEOUT_US);
     uint64_t timeout = AP_HAL::native_micros64() + timeout_us;
@@ -482,7 +479,7 @@ AP_PolarisCAN::AP_POLARISCAN_AWD_STATUS AP_PolarisCAN::get_ADC_status() {
 float AP_PolarisCAN::get_engine_hours() {
     uint32_t now_ms = AP_HAL::millis();
     WITH_SEMAPHORE(_data_sem);
-    if ((now_ms - _ENGHRS_data.u32lastRecvFrameTime > 2*nENGTEMP_PERIOD_MS) && (!_ENGHRS_data.boMessageTimeout)){
+    if ((now_ms - _ENGHRS_data.u32lastRecvFrameTime > 2*nENG_HOUR_REQ_INTERVAL) && (!_ENGHRS_data.boMessageTimeout)){
         _ENGHRS_data.fTotalEngineHours = -1;
         _ENGHRS_data.boMessageTimeout = true;
     }

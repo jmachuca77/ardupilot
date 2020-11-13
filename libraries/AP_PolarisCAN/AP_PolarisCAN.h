@@ -67,7 +67,8 @@
 #define nVDHR_ID      0x18FEC117
 #define nVDHR_PERIOD_MS     1100
 
-#define nENG_HOUR_REQ_INTERVAL 500
+// Request Engine hours every 5 min.
+#define nENG_HOUR_REQ_INTERVAL 300000
 #define nSTORED_DTC_REQ_INTERVAL 60000
 
 #define nSIZE_OF_DTC_ARRAY 10
@@ -94,6 +95,7 @@ public:
     void update();
     void sendClearDTCs();
     void sendClearStoredDTCs();
+    void sendGetStoredDTCs();
 
     typedef enum {
         NOTENGAGED          = 0,
