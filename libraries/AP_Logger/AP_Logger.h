@@ -229,7 +229,7 @@ public:
     void Write_Event(LogEvent id);
     void Write_Error(LogErrorSubsystem sub_system,
                      LogErrorCode error_code);
-    void Write_GPS(uint8_t instance, uint64_t time_us=0);
+    void Write_GPS(uint8_t instance);
     void Write_IMU();
     bool Write_ISBH(uint16_t seqno,
                         AP_InertialSensor::IMU_SENSOR_TYPE sensor_type,
@@ -248,7 +248,7 @@ public:
     void Write_RCOUT(void);
     void Write_RSSI();
     void Write_Rally();
-    void Write_Baro(uint64_t time_us=0);
+    void Write_Baro();
     void Write_Power(void);
     void Write_AHRS2();
     void Write_POS();
@@ -264,7 +264,7 @@ public:
     void Write_Attitude(const Vector3f &targets);
     void Write_AttitudeView(AP_AHRS_View &ahrs, const Vector3f &targets);
     void Write_Current();
-    void Write_Compass(uint64_t time_us=0);
+    void Write_Compass();
     void Write_Mode(uint8_t mode, const ModeReason reason);
 
     void Write_EntireMission();
@@ -472,7 +472,7 @@ private:
     void validate_structures(const struct LogStructure *logstructures, const uint8_t num_types);
     void dump_structure_field(const struct LogStructure *logstructure, const char *label, const uint8_t fieldnum);
     void dump_structures(const struct LogStructure *logstructures, const uint8_t num_types);
-    void assert_same_fmt_for_name(const log_write_fmt *f,
+    bool assert_same_fmt_for_name(const log_write_fmt *f,
                                   const char *name,
                                   const char *labels,
                                   const char *units,
@@ -489,6 +489,9 @@ private:
 
     bool _writes_enabled:1;
     bool _force_log_disarmed:1;
+
+    // remember formats for replay
+    void save_format_Replay(const void *pBuffer);
 
     /* support for retrieving logs via mavlink: */
 

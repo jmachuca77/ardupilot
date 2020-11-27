@@ -952,6 +952,10 @@ void QuadPlane::run_z_controller(void)
         } else {
             // tailsitters gain lots of vertical speed in transisison, set target to the stopping point
             pos_control->set_target_to_stopping_point_z();
+            // make sure stopping point is above current alt
+            if (pos_control->get_alt_target() < inertial_nav.get_altitude()) {
+                set_alt_target_current();
+            }
         }
         gcs().send_text(MAV_SEVERITY_INFO, "Reset alt target to %.1f", (double)pos_control->get_alt_target() * 0.01f);
         pos_control->set_desired_velocity_z(inertial_nav.get_velocity_z());
@@ -2946,7 +2950,8 @@ void QuadPlane::Log_Write_QControl_Tuning()
         climb_rate          : int16_t(inertial_nav.get_velocity_z()),
         throttle_mix        : attitude_control->get_throttle_mix(),
         speed_scaler        : log_spd_scaler,
-        transition_state    : static_cast<uint8_t>(transition_state)
+        transition_state    : static_cast<uint8_t>(transition_state),
+        assist              : assisted_flight,
     };
     plane.logger.WriteBlock(&pkt, sizeof(pkt));
 

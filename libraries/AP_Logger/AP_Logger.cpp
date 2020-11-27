@@ -652,9 +652,33 @@ void AP_Logger::set_vehicle_armed(const bool armed_state)
 
 }
 
+#if APM_BUILD_TYPE(APM_BUILD_Replay)
+/*
+  remember formats for replay. This allows WriteV() to work within
+  replay
+*/
+void AP_Logger::save_format_Replay(const void *pBuffer)
+{
+    if (((uint8_t *)pBuffer)[2] == LOG_FORMAT_MSG) {
+        struct log_Format *fmt = (struct log_Format *)pBuffer;
+        struct log_write_fmt *f = new log_write_fmt;
+        f->msg_type = fmt->type;
+        f->msg_len = fmt->length;
+        f->name = strndup(fmt->name, sizeof(fmt->name));
+        f->fmt = strndup(fmt->format, sizeof(fmt->format));
+        f->labels = strndup(fmt->labels, sizeof(fmt->labels));
+        f->next = log_write_fmts;
+        log_write_fmts = f;
+    }
+}
+#endif
+
 
 // start functions pass straight through to backend:
 void AP_Logger::WriteBlock(const void *pBuffer, uint16_t size) {
+#if APM_BUILD_TYPE(APM_BUILD_Replay)
+    save_format_Replay(pBuffer);
+#endif
     FOR_EACH_BACKEND(WriteBlock(pBuffer, size));
 }
 
@@ -882,12 +906,14 @@ void AP_Logger::WriteCritical(const char *name, const char *labels, const char *
 void AP_Logger::WriteV(const char *name, const char *labels, const char *units, const char *mults, const char *fmt, va_list arg_list, bool is_critical)
 {
     // WriteV is not safe in replay as we can re-use IDs
-#if !APM_BUILD_TYPE(APM_BUILD_Replay)
-    struct log_write_fmt *f = msg_fmt_for_name(name, labels, units, mults, fmt);
+    const bool direct_comp = APM_BUILD_TYPE(APM_BUILD_Replay);
+    struct log_write_fmt *f = msg_fmt_for_name(name, labels, units, mults, fmt, direct_comp);
     if (f == nullptr) {
         // unable to map name to a messagetype; could be out of
         // msgtypes, could be out of slots, ...
+#if !APM_BUILD_TYPE(APM_BUILD_Replay)
         INTERNAL_ERROR(AP_InternalError::error_t::logger_mapfailure);
+#endif
         return;
     }
 
@@ -903,7 +929,6 @@ void AP_Logger::WriteV(const char *name, const char *labels, const char *units, 
         backends[i]->Write(f->msg_type, arg_copy, is_critical);
         va_end(arg_copy);
     }
-#endif
 }
 
 /*
@@ -927,7 +952,7 @@ bool AP_Logger::allow_start_ekf() const
 }
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-void AP_Logger::assert_same_fmt_for_name(const AP_Logger::log_write_fmt *f,
+bool AP_Logger::assert_same_fmt_for_name(const AP_Logger::log_write_fmt *f,
                                                const char *name,
                                                const char *labels,
                                                const char *units,
@@ -944,6 +969,13 @@ void AP_Logger::assert_same_fmt_for_name(const AP_Logger::log_write_fmt *f,
         Debug("format labels differ (%s) vs (%s)", f->labels, labels);
         passed = false;
     }
+    if (!streq(f->fmt, fmt)) {
+        Debug("format fmt differ (%s) vs (%s)",
+              (f->fmt ? f->fmt : "nullptr"),
+              (fmt ? fmt : "nullptr"));
+        passed = false;
+    }
+#if !APM_BUILD_TYPE(APM_BUILD_Replay)
     if ((f->units != nullptr && units == nullptr) ||
         (f->units == nullptr && units != nullptr) ||
         (units !=nullptr && !streq(f->units, units))) {
@@ -960,29 +992,26 @@ void AP_Logger::assert_same_fmt_for_name(const AP_Logger::log_write_fmt *f,
               (mults ? mults : "nullptr"));
         passed = false;
     }
-    if (!streq(f->fmt, fmt)) {
-        Debug("format fmt differ (%s) vs (%s)",
-              (f->fmt ? f->fmt : "nullptr"),
-              (fmt ? fmt : "nullptr"));
-        passed = false;
-    }
     if (!passed) {
         AP_BoardConfig::config_error("See console: Format definition must be consistent for every call of Write");
     }
+#endif
+    return passed;
 }
 #endif
 
 AP_Logger::log_write_fmt *AP_Logger::msg_fmt_for_name(const char *name, const char *labels, const char *units, const char *mults, const char *fmt, const bool direct_comp)
 {
     WITH_SEMAPHORE(log_write_fmts_sem);
-
     struct log_write_fmt *f;
     for (f = log_write_fmts; f; f=f->next) {
         if (!direct_comp) {
             if (f->name == name) { // ptr comparison
                 // already have an ID for this name:
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-                assert_same_fmt_for_name(f, name, labels, units, mults, fmt);
+                if (!assert_same_fmt_for_name(f, name, labels, units, mults, fmt)) {
+                    return nullptr;
+                }
 #endif
                 return f;
             }
@@ -991,12 +1020,21 @@ AP_Logger::log_write_fmt *AP_Logger::msg_fmt_for_name(const char *name, const ch
             if (strcmp(f->name,name) == 0) {
                 // already have an ID for this name:
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-                assert_same_fmt_for_name(f, name, labels, units, mults, fmt);
+                if (!assert_same_fmt_for_name(f, name, labels, units, mults, fmt)) {
+                    return nullptr;
+                }
 #endif
                 return f;
             }
         }
     }
+
+#if APM_BUILD_TYPE(APM_BUILD_Replay)
+    // don't allow for new msg types during replay. We will be able to
+    // support these eventually, but for now they cause corruption
+    return nullptr;
+#endif
+
     f = (struct log_write_fmt *)calloc(1, sizeof(*f));
     if (f == nullptr) {
         // out of memory

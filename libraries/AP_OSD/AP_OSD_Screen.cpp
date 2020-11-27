@@ -1457,7 +1457,7 @@ void AP_OSD_Screen::draw_vspeed(uint8_t x, uint8_t y)
         sym = SYM_DOWN_DOWN;
     }
     vs_scaled = u_scale(VSPEED, fabsf(vspd));
-    if (vs_scaled < 5.0f) {
+    if (vs_scaled < 10.0f) {
         backend->write(x, y, false, "%c%2.1f%c", sym, (float)vs_scaled, u_icon(VSPEED));
     } else {
         backend->write(x, y, false, "%c%3d%c", sym, (int)vs_scaled, u_icon(VSPEED));
@@ -1777,17 +1777,15 @@ void AP_OSD_Screen::draw_callsign(uint8_t x, uint8_t y)
 #if HAVE_FILESYSTEM_SUPPORT
     if (!callsign_data.load_attempted) {
         callsign_data.load_attempted = true;
-        int fd = AP::FS().open("callsign.txt", O_RDONLY);
-        if (fd != -1) {
-            char s[20] {};
-            int32_t len = AP::FS().read(fd, s, sizeof(s)-1);
+        FileData *fd = AP::FS().load_file("callsign.txt");
+        if (fd != nullptr) {
+            uint32_t len = fd->length;
             // trim off whitespace
-            while (len > 0 && isspace(s[len-1])) {
-                s[len-1] = 0;
+            while (len > 0 && isspace(fd->data[len-1])) {
                 len--;
             }
-            AP::FS().close(fd);
-            callsign_data.str = strdup(s);
+            callsign_data.str = strndup((const char *)fd->data, len);
+            delete fd;
         }
     }
     if (callsign_data.str != nullptr) {

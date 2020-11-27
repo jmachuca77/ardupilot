@@ -1025,6 +1025,8 @@ private:
         uint32_t start_ms;
         uint32_t last_ms;
         uint32_t last_port1_data_ms;
+        uint32_t baud1;
+        uint32_t baud2;
         uint8_t timeout_s;
         HAL_Semaphore sem;
     } _passthru;

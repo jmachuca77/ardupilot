@@ -83,14 +83,14 @@ void NavEKF3_core::calcGpsGoodToAlign(void)
         gpsVertVelFilt = 0.1f * gpsDataNew.vel.z + 0.9f * gpsVertVelFilt;
         gpsVertVelFilt = constrain_float(gpsVertVelFilt,-10.0f,10.0f);
         gpsVertVelFail = (fabsf(gpsVertVelFilt) > 0.3f*checkScaler) && (frontend->_gpsCheck & MASK_GPS_VERT_SPD);
-    } else if ((frontend->_fusionModeGPS == 0) && !gps.have_vertical_velocity(preferred_gps)) {
+    } else if (frontend->sources.useVelZSource(AP_NavEKF_Source::SourceZ::GPS) && !gps.have_vertical_velocity(preferred_gps)) {
         // If the EKF settings require vertical GPS velocity and the receiver is not outputting it, then fail
         gpsVertVelFail = true;
         // if we have a 3D fix with no vertical velocity and
         // EK3_GPS_TYPE=0 then change it to 1. It means the GPS is not
         // capable of giving a vertical velocity
         if (gps.status(preferred_gps) >= AP_DAL_GPS::GPS_OK_FIX_3D) {
-            frontend->_fusionModeGPS.set(1);
+            frontend->sources.setVelZSource(AP_NavEKF_Source::SourceZ::NONE);
             GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "EK3: Changed EK3_GPS_TYPE to 1");
         }
     } else {
@@ -402,11 +402,11 @@ void NavEKF3_core::detectFlight()
     updateTouchdownExpected();
 
     // handle reset of counters used to control how many times we will try to reset the yaw to the EKF-GSF value per flight
-    if (!prevOnGround && onGround) {
-        // landed so disable filter bank
+    if ((!prevOnGround && onGround) || !gpsAccuracyGood) {
+        // disable filter bank
         EKFGSF_run_filterbank = false;
-    } else if (yawEstimator && !EKFGSF_run_filterbank && ((!prevInFlight && inFlight) || expectTakeoff)) {
-        // started flying so reset counters and enable filter bank
+    } else if (yawEstimator != nullptr && !EKFGSF_run_filterbank && (inFlight || expectTakeoff) && gpsAccuracyGood) {
+        // flying or about to fly so reset counters and enable filter bank when GPS is good
         EKFGSF_yaw_reset_ms = 0;
         EKFGSF_yaw_reset_request_ms = 0;
         EKFGSF_yaw_reset_count = 0;

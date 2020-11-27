@@ -32,7 +32,7 @@
 #include <AP_AHRS/AP_AHRS.h>
 #include <AP_Baro/AP_Baro.h>
 #include <AP_RangeFinder/AP_RangeFinder.h>
-#include <AP_Generator/AP_Generator_RichenPower.h>
+#include <AP_Generator/AP_Generator.h>
 #include <AP_Terrain/AP_Terrain.h>
 #include <AP_ADSB/AP_ADSB.h>
 #include <AP_Scripting/AP_Scripting.h>
@@ -962,7 +962,7 @@ bool AP_Arming::camera_checks(bool display_failure)
 
 bool AP_Arming::osd_checks(bool display_failure) const
 {
-#if OSD_ENABLED
+#if OSD_PARAM_ENABLED && OSD_ENABLED 
     if ((checks_to_perform & ARMING_CHECK_ALL) || (checks_to_perform & ARMING_CHECK_CAMERA)) {
         const AP_OSD *osd = AP::osd();
         if (osd == nullptr) {
@@ -1100,7 +1100,7 @@ bool AP_Arming::aux_auth_checks(bool display_failure)
 bool AP_Arming::generator_checks(bool display_failure) const
 {
 #if GENERATOR_ENABLED
-    const AP_Generator_RichenPower *generator = AP::generator();
+    const AP_Generator *generator = AP::generator();
     if (generator == nullptr) {
         return true;
     }

@@ -4,6 +4,7 @@
 #include <AP_Logger/AP_Logger.h>
 #include <AP_AHRS/AP_AHRS.h>
 #include <AP_Vehicle/AP_Vehicle.h>
+#include <AP_OpticalFlow/AP_OpticalFlow.h>
 
 #if APM_BUILD_TYPE(APM_BUILD_Replay)
 #include <AP_NavEKF2/AP_NavEKF2.h>
@@ -61,6 +62,7 @@ void AP_DAL::start_frame(AP_DAL::FrameType frametype)
     _RFRN.ahrs_airspeed_sensor_enabled = AP::ahrs().airspeed_sensor_enabled();
     _RFRN.available_memory = hal.util->available_memory();
     _RFRN.ahrs_trim = ahrs.get_trim();
+    _RFRN.opticalflow_enabled = AP::opticalflow() && AP::opticalflow()->enabled();
     WRITE_REPLAY_BLOCK_IFCHANGED(RFRN, _RFRN, old);
 
     // update body conversion
@@ -97,7 +99,7 @@ void AP_DAL::end_frame(void)
     }
 }
 
-void AP_DAL::log_event2(AP_DAL::Event2 event)
+void AP_DAL::log_event2(AP_DAL::Event event)
 {
 #if !APM_BUILD_TYPE(APM_BUILD_AP_DAL_Standalone) && !APM_BUILD_TYPE(APM_BUILD_Replay)
     end_frame();
@@ -130,7 +132,7 @@ void AP_DAL::log_writeDefaultAirSpeed2(const float aspeed)
 #endif
 }
 
-void AP_DAL::log_event3(AP_DAL::Event3 event)
+void AP_DAL::log_event3(AP_DAL::Event event)
 {
 #if !APM_BUILD_TYPE(APM_BUILD_AP_DAL_Standalone) && !APM_BUILD_TYPE(APM_BUILD_Replay)
     end_frame();

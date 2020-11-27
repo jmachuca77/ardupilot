@@ -70,9 +70,6 @@ void Plane::init_ardupilot()
     // setup telem slots with serial ports
     gcs().setup_uarts();
 
-#if GENERATOR_ENABLED
-    generator.init();
-#endif
 
 #if OSD_ENABLED == ENABLED
     osd.init();
@@ -439,7 +436,7 @@ bool Plane::should_log(uint32_t mask)
  */
 int8_t Plane::throttle_percentage(void)
 {
-    if (quadplane.in_vtol_mode()) {
+    if (quadplane.in_vtol_mode() && !quadplane.in_tailsitter_vtol_transition()) {
         return quadplane.throttle_percentage();
     }
     float throttle = SRV_Channels::get_output_scaled(SRV_Channel::k_throttle);

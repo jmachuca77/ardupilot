@@ -199,17 +199,23 @@ void NavEKF3_core::SelectMagFusion()
     // used for load levelling
     magFusePerformed = false;
 
-    effectiveMagCal = effective_magCal();
+    // get default yaw source
+    const AP_NavEKF_Source::SourceYaw yaw_source = frontend->sources.getYawSource();
+    if (yaw_source != yaw_source_last) {
+        yaw_source_last = yaw_source;
+        yaw_source_reset = true;
+    }
 
     // Handle case where we are not using a yaw sensor of any type and and attempt to reset the yaw in
     // flight using the output from the GSF yaw estimator.
     if (!use_compass() &&
-        effectiveMagCal != MagCal::EXTERNAL_YAW &&
-        effectiveMagCal != MagCal::EXTERNAL_YAW_FALLBACK) {
+        yaw_source != AP_NavEKF_Source::SourceYaw::EXTERNAL &&
+        yaw_source != AP_NavEKF_Source::SourceYaw::EXTERNAL_COMPASS_FALLBACK) {
 
         // because this type of reset event is not as time critical, require a continuous history of valid estimates
-        if (!yawAlignComplete && EKFGSF_yaw_valid_count >= GSF_YAW_VALID_HISTORY_THRESHOLD) {
+        if ((!yawAlignComplete || yaw_source_reset) && EKFGSF_yaw_valid_count >= GSF_YAW_VALID_HISTORY_THRESHOLD) {
             yawAlignComplete = EKFGSF_resetMainFilterYaw();
+            yaw_source_reset = false;
         }
 
         if (imuSampleTime_ms - lastSynthYawTime_ms > 140) {
@@ -221,10 +227,12 @@ void NavEKF3_core::SelectMagFusion()
                 yawAngDataDelayed.type = 1;
             }
 
-            float yawEKFGSF, yawVarianceEKFGSF;
+            float yawEKFGSF, yawVarianceEKFGSF, velInnovLength;
             bool canUseEKFGSF = yawEstimator != nullptr &&
                                 yawEstimator->getYawData(yawEKFGSF, yawVarianceEKFGSF) &&
-                                is_positive(yawVarianceEKFGSF) && yawVarianceEKFGSF < sq(radians(GSF_YAW_ACCURACY_THRESHOLD_DEG));
+                                is_positive(yawVarianceEKFGSF) &&
+                                yawVarianceEKFGSF < sq(radians(GSF_YAW_ACCURACY_THRESHOLD_DEG)) &&
+                                (assume_zero_sideslip() || (yawEstimator->getVelInnovLength(velInnovLength) && velInnovLength < frontend->maxYawEstVelInnov));
             if (yawAlignComplete && canUseEKFGSF && !assume_zero_sideslip()) {
                 // use the EKF-GSF yaw estimator output as this is more robust than the EKF can achieve without a yaw measurement
                 // for non fixed wing platform types
@@ -259,11 +267,12 @@ void NavEKF3_core::SelectMagFusion()
     }
 
     // Handle case where we are using an external yaw sensor instead of a magnetomer
-    if (effectiveMagCal == MagCal::EXTERNAL_YAW || effectiveMagCal == MagCal::EXTERNAL_YAW_FALLBACK) {
+    if (yaw_source == AP_NavEKF_Source::SourceYaw::EXTERNAL || yaw_source == AP_NavEKF_Source::SourceYaw::EXTERNAL_COMPASS_FALLBACK) {
         bool have_fused_gps_yaw = false;
         if (storedYawAng.recall(yawAngDataDelayed,imuDataDelayed.time_ms)) {
-            if (tiltAlignComplete && !yawAlignComplete) {
+            if (tiltAlignComplete && (!yawAlignComplete || yaw_source_reset)) {
                 alignYawAngle();
+                yaw_source_reset = false;
             } else if (tiltAlignComplete && yawAlignComplete) {
                 fuseEulerYaw(false, true);
             }
@@ -294,7 +303,7 @@ void NavEKF3_core::SelectMagFusion()
             }
             lastSynthYawTime_ms = imuSampleTime_ms;
         }
-        if (effectiveMagCal == MagCal::EXTERNAL_YAW) {
+        if (yaw_source == AP_NavEKF_Source::SourceYaw::EXTERNAL) {
             // no fallback
             return;
         }
@@ -342,9 +351,9 @@ void NavEKF3_core::SelectMagFusion()
         magTimeout = true;
     }
 
-    if (effectiveMagCal != MagCal::EXTERNAL_YAW_FALLBACK) {
+    if (yaw_source != AP_NavEKF_Source::SourceYaw::EXTERNAL_COMPASS_FALLBACK) {
         // check for and read new magnetometer measurements. We don't
-        // real for EXTERNAL_YAW_FALLBACK as it has already been read
+        // read for EXTERNAL_COMPASS_FALLBACK as it has already been read
         // above
         readMagData();
     }
@@ -354,6 +363,11 @@ void NavEKF3_core::SelectMagFusion()
 
     // Control reset of yaw and magnetic field states if we are using compass data
     if (magDataToFuse) {
+        if (yaw_source_reset && (yaw_source == AP_NavEKF_Source::SourceYaw::COMPASS ||
+                                 yaw_source == AP_NavEKF_Source::SourceYaw::EXTERNAL_COMPASS_FALLBACK)) {
+            magYawResetRequest = true;
+            yaw_source_reset = false;
+        }
         controlMagYawReset();
     }
 
@@ -864,12 +878,12 @@ void NavEKF3_core::fuseEulerYaw(bool usePredictedYaw, bool useExternalYawSensor)
 
     // external yaw available check
     bool canUseGsfYaw = false;
-    float gsfYaw = 0.0f;
-    float gsfYawVariance = 0.0f;
+    float gsfYaw, gsfYawVariance, velInnovLength;
     if (usePredictedYaw && yawEstimator != nullptr) {
-        canUseGsfYaw = yawEstimator->getYawData(gsfYaw, gsfYawVariance)
-                        && is_positive(gsfYawVariance)
-                        && gsfYawVariance < sq(radians(GSF_YAW_ACCURACY_THRESHOLD_DEG));
+        canUseGsfYaw = yawEstimator->getYawData(gsfYaw, gsfYawVariance) &&
+                       is_positive(gsfYawVariance) &&
+                       gsfYawVariance < sq(radians(GSF_YAW_ACCURACY_THRESHOLD_DEG)) &&
+                       (assume_zero_sideslip() || (yawEstimator->getVelInnovLength(velInnovLength) && velInnovLength < frontend->maxYawEstVelInnov));
     }
 
     // yaw measurement error variance (rad^2)
@@ -1461,8 +1475,11 @@ bool NavEKF3_core::EKFGSF_resetMainFilterYaw()
         return false;
     };
 
-    float yawEKFGSF, yawVarianceEKFGSF;
-    if (yawEstimator->getYawData(yawEKFGSF, yawVarianceEKFGSF) && is_positive(yawVarianceEKFGSF) && yawVarianceEKFGSF < sq(radians(GSF_YAW_ACCURACY_THRESHOLD_DEG))) {
+    float yawEKFGSF, yawVarianceEKFGSF, velInnovLength;
+    if (yawEstimator->getYawData(yawEKFGSF, yawVarianceEKFGSF) &&
+        is_positive(yawVarianceEKFGSF) &&
+        yawVarianceEKFGSF < sq(radians(GSF_YAW_ACCURACY_THRESHOLD_DEG)) &&
+        (assume_zero_sideslip() || (yawEstimator->getVelInnovLength(velInnovLength) && velInnovLength < frontend->maxYawEstVelInnov))) {
 
         // keep roll and pitch and reset yaw
         rotationOrder order;
