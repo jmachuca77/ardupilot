@@ -38,7 +38,9 @@ const AP_Param::Info AP_Periph_FW::var_info[] = {
     // trigger bootloader flash
     GSCALAR(flash_bootloader,     "FLASH_BOOTLOADER", 0),
 #endif
-    
+
+    GSCALAR(debug, "DEBUG", 0),
+
 #ifdef HAL_PERIPH_ENABLE_BUZZER
     GSCALAR(buzz_volume,     "BUZZER_VOLUME", 100),
 #endif
@@ -64,9 +66,9 @@ const AP_Param::Info AP_Periph_FW::var_info[] = {
 
 #ifdef HAL_PERIPH_ENABLE_BARO
     // Baro driver
-    // @Group: BARO_
+    // @Group: BARO
     // @Path: ../../libraries/AP_Baro/AP_Baro.cpp
-    GOBJECT(baro, "BARO_", AP_Baro),
+    GOBJECT(baro, "BARO", AP_Baro),
     GSCALAR(baro_enable, "BARO_ENABLE", 1),
 #endif
 
@@ -104,7 +106,7 @@ const AP_Param::Info AP_Periph_FW::var_info[] = {
 #ifdef HAL_PERIPH_ENABLE_HWESC
     GSCALAR(esc_number, "ESC_NUMBER", 0),
 #endif
-    
+
     AP_VAREND
 };
 

@@ -60,7 +60,7 @@ NavEKF3_core::MagCal NavEKF3_core::effective_magCal(void) const
 void NavEKF3_core::setWindMagStateLearningMode()
 {
     // If we are on ground, or in constant position mode, or don't have the right vehicle and sensing to estimate wind, inhibit wind states
-    bool setWindInhibit = (!useAirspeed() && !assume_zero_sideslip()) || onGround || (PV_AidingMode == AID_NONE);
+    bool setWindInhibit = (!useAirspeed() && !assume_zero_sideslip() && !(dragFusionEnabled && finalInflightYawInit)) || onGround || (PV_AidingMode == AID_NONE);
     if (!inhibitWindStates && setWindInhibit) {
         inhibitWindStates = true;
         updateStateIndexLim();
@@ -77,7 +77,7 @@ void NavEKF3_core::setWindMagStateLearningMode()
             stateStruct.wind_vel.x = windSpeed * cosf(tempEuler.z);
             stateStruct.wind_vel.y = windSpeed * sinf(tempEuler.z);
 
-            // set the wind sate variances to the measurement uncertainty
+            // set the wind state variances to the measurement uncertainty
             for (uint8_t index=22; index<=23; index++) {
                 P[index][index] = sq(constrain_float(frontend->_easNoise, 0.5f, 5.0f) * constrain_float(dal.get_EAS2TAS(), 0.9f, 10.0f));
             }
@@ -485,7 +485,7 @@ bool NavEKF3_core::readyToUseGPS(void) const
         return false;
     }
 
-    return validOrigin && tiltAlignComplete && yawAlignComplete && (delAngBiasLearned || assume_zero_sideslip()) && gpsGoodToAlign && gpsDataToFuse && !gpsInhibit;
+    return validOrigin && tiltAlignComplete && yawAlignComplete && (delAngBiasLearned || assume_zero_sideslip()) && gpsGoodToAlign && gpsDataToFuse;
 }
 
 // return true if the filter to be ready to use the beacon range measurements
@@ -607,20 +607,6 @@ void NavEKF3_core::checkGyroCalStatus(void)
         delAngBiasLearned = (P[10][10] <= delAngBiasVarMax) &&
                             (P[11][11] <= delAngBiasVarMax) &&
                             (P[12][12] <= delAngBiasVarMax);
-    }
-}
-
-// Commands the EKF to not use GPS.
-// This command must be sent prior to vehicle arming and EKF commencement of GPS usage
-// Returns 0 if command rejected
-// Returns 1 if command accepted
-uint8_t NavEKF3_core::setInhibitGPS(void)
-{
-    if((PV_AidingMode == AID_ABSOLUTE) || motorsArmed) {
-        return 0;
-    } else {
-        gpsInhibit = true;
-        return 1;
     }
 }
 

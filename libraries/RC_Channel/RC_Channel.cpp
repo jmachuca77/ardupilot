@@ -541,9 +541,9 @@ void RC_Channel::init_aux_function(const aux_func_t ch_option, const AuxSwitchPo
     case AUX_FUNC::SPRAYER:
 #if HAL_MOUNT_ENABLED
     case AUX_FUNC::RETRACT_MOUNT:
+#endif
         do_aux_function(ch_option, ch_flag);
         break;
-#endif
     default:
         gcs().send_text(MAV_SEVERITY_WARNING, "Failed to init: RC%u_OPTION: %u\n",
                            (unsigned)(this->ch_in+1), (unsigned)ch_option);
@@ -570,6 +570,7 @@ const RC_Channel::LookupTable RC_Channel::lookuptable[] = {
     { AUX_FUNC::RETRACT_MOUNT,"RetractMount"},
     { AUX_FUNC::RELAY,"Relay1"},
     { AUX_FUNC::LANDING_GEAR,"Landing"},
+    { AUX_FUNC::MOTOR_ESTOP,"MotorEStop"},
     { AUX_FUNC::MOTOR_INTERLOCK,"MotorInterlock"},
     { AUX_FUNC::RELAY2,"Relay2"},
     { AUX_FUNC::RELAY3,"Relay3"},
