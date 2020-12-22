@@ -9,6 +9,9 @@ extern const AP_HAL::HAL &hal;
 #ifndef HAL_PERIPH_ADSB_BAUD_DEFAULT
 #define HAL_PERIPH_ADSB_BAUD_DEFAULT 57600
 #endif
+#ifndef HAL_PERIPH_ADSB_PORT_DEFAULT
+#define HAL_PERIPH_ADSB_PORT_DEFAULT 1
+#endif
 
 /*
  *  AP_Periph parameter definitions
@@ -40,6 +43,8 @@ const AP_Param::Info AP_Periph_FW::var_info[] = {
 #endif
 
     GSCALAR(debug, "DEBUG", 0),
+
+    GSCALAR(serial_number, "BRD_SERIAL_NUM", 0),
 
 #ifdef HAL_PERIPH_ENABLE_BUZZER
     GSCALAR(buzz_volume,     "BUZZER_VOLUME", 100),
@@ -96,6 +101,7 @@ const AP_Param::Info AP_Periph_FW::var_info[] = {
 
 #ifdef HAL_PERIPH_ENABLE_ADSB
     GSCALAR(adsb_baudrate, "ADSB_BAUDRATE", HAL_PERIPH_ADSB_BAUD_DEFAULT),
+    GSCALAR(adsb_port, "ADSB_PORT", HAL_PERIPH_ADSB_PORT_DEFAULT),
 #endif
 
 #ifdef HAL_PERIPH_ENABLE_PWM_HARDPOINT
@@ -105,6 +111,13 @@ const AP_Param::Info AP_Periph_FW::var_info[] = {
 
 #ifdef HAL_PERIPH_ENABLE_HWESC
     GSCALAR(esc_number, "ESC_NUMBER", 0),
+#endif
+
+#ifdef HAL_PERIPH_ENABLE_RC_OUT
+    // Servo driver
+    // @Group: OUT
+    // @Path: ../libraries/SRV_Channel/SRV_Channels.cpp
+    GOBJECT(servo_channels, "OUT",     SRV_Channels),
 #endif
 
     AP_VAREND

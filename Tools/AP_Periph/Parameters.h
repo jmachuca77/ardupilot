@@ -30,6 +30,9 @@ public:
         k_param_esc_number,
         k_param_battery,
         k_param_debug,
+        k_param_serial_number,
+        k_param_adsb_port,
+        k_param_servo_channels,
     };
 
     AP_Int16 format_version;
@@ -54,6 +57,7 @@ public:
 
 #ifdef HAL_PERIPH_ENABLE_ADSB
     AP_Int32 adsb_baudrate;
+    AP_Int8 adsb_port;
 #endif
 
 #ifdef HAL_PERIPH_ENABLE_PWM_HARDPOINT
@@ -66,6 +70,8 @@ public:
 #endif
 
     AP_Int8 debug;
+
+    AP_Int32 serial_number;
 
     Parameters() {}
 };

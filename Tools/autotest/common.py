@@ -2056,11 +2056,15 @@ class AutoTest(ABC):
 
     def log_filepath(self, lognum):
         '''return filepath to lognum (where lognum comes from LOG_ENTRY'''
-        log_list = sorted(self.log_list())
+        log_list = self.log_list()
         return log_list[lognum-1]
 
-    def assert_bytes_equal(self, bytes1, bytes2):
-        for i in range(0,len(bytes1)):
+    def assert_bytes_equal(self, bytes1, bytes2, maxlen=None):
+        tocheck = len(bytes1)
+        if maxlen is not None:
+            if tocheck > maxlen:
+                tocheck = maxlen
+        for i in range(0, tocheck):
             if bytes1[i] != bytes2[i]:
                 raise NotAchievedException("differ at offset %u" % i)
 
@@ -2184,7 +2188,7 @@ class AutoTest(ABC):
             raise NotAchievedException("Incorrect log id received")
 
         # download the log file in the normal way:
-        bytes_to_fetch = 10000000
+        bytes_to_fetch = 100000
         self.progress("Sending request for %u bytes at offset 0" % (bytes_to_fetch,))
         tstart = self.get_sim_time()
         self.mav.mav.log_request_data_send(
@@ -2194,7 +2198,9 @@ class AutoTest(ABC):
             0,
             bytes_to_fetch
         )
-        bytes_to_read = log_entry.size
+        bytes_to_read = bytes_to_fetch
+        if log_entry.size < bytes_to_read:
+            bytes_to_read = log_entry.size
         data_downloaded = []
         bytes_read = 0
         last_print = 0
@@ -2221,7 +2227,7 @@ class AutoTest(ABC):
 
         self.progress("actual_bytes_len=%u data_downloaded_len=%u" %
                       (len(actual_bytes), len(data_downloaded)))
-        self.assert_bytes_equal(actual_bytes, data_downloaded)
+        self.assert_bytes_equal(actual_bytes, data_downloaded, maxlen=bytes_to_read)
 
         if False:
             bytes_to_read = log_entry.size
@@ -2259,7 +2265,7 @@ class AutoTest(ABC):
             self.assert_bytes_equal(actual_bytes, data_downloaded)
 
         # ... and now download it reading backwards...
-        bytes_to_read = log_entry.size
+        bytes_to_read = bytes_to_fetch
         bytes_read = 0
         backwards_data_downloaded = []
         last_print = 0
@@ -2292,10 +2298,10 @@ class AutoTest(ABC):
                 last_print = time.time()
                 self.progress("Read %u/%u" % (bytes_read, bytes_to_read))
 
-        self.assert_bytes_equal(actual_bytes, backwards_data_downloaded)
-        if len(actual_bytes) != len(backwards_data_downloaded):
-            raise NotAchievedException("Size delta: actual=%u vs downloaded=%u" %
-                                       (len(actual_bytes), len(backwards_data_downloaded)))
+        self.assert_bytes_equal(actual_bytes, backwards_data_downloaded, maxlen=bytes_to_read)
+        # if len(actual_bytes) != len(backwards_data_downloaded):
+        #     raise NotAchievedException("Size delta: actual=%u vs downloaded=%u" %
+        #                                (len(actual_bytes), len(backwards_data_downloaded)))
 
 
     #################################################
@@ -2353,7 +2359,7 @@ class AutoTest(ABC):
 
     def log_list(self):
         '''return a list of log files present in POSIX-style loging dir'''
-        ret = glob.glob("logs/*.BIN")
+        ret = sorted(glob.glob("logs/00*.BIN"))
         self.progress("log list: %s" % str(ret))
         return ret
 
@@ -6526,6 +6532,29 @@ Also, ignores heartbeats not from our target system'''
         if self.get_parameter(parameter_name) != new_parameter_value:
             raise NotAchievedException("Parameter value did not stick")
 
+    def test_initial_mode(self):
+        if self.is_copter():
+            init_mode = (9, "LAND")
+        if self.is_rover():
+            init_mode = (4, "HOLD")
+        if self.is_plane():
+            init_mode = (13, "TAKEOFF")
+        if self.is_tracker():
+            init_mode = (1, "STOP")
+        if self.is_sub():
+            return # NOT Supported yet
+        self.context_push()
+        self.set_parameter("SIM_RC_FAIL", 1)
+        self.progress("Setting INITIAL_MODE to %s" % init_mode[1])
+        self.set_parameter("INITIAL_MODE", init_mode[0])
+        self.reboot_sitl()
+        self.wait_mode(init_mode[1])
+        self.progress("Testing back mode switch")
+        self.set_parameter("SIM_RC_FAIL", 0)
+        self.wait_for_mode_switch_poll()
+        self.context_pop()
+        self.reboot_sitl()
+
     def test_gripper(self):
         self.context_push()
         self.set_parameter("GRIP_ENABLE", 1)
@@ -6761,8 +6790,11 @@ switch value'''
         return num_log
 
     def current_onboard_log_filepath(self):
-        '''return filepath to currently open dataflash log'''
-        return os.path.join("logs/%08u.BIN" % self.last_onboard_log())
+        '''return filepath to currently open dataflash log.  We assume that's
+        the latest log...'''
+        logs = self.log_list()
+        latest = logs[-1]
+        return latest
 
     def dfreader_for_current_onboard_log(self):
         return DFReader.DFReader_binary(self.current_onboard_log_filepath(),
@@ -8169,6 +8201,10 @@ switch value'''
             ("GetCapabilities",
              "Get Capabilities",
              self.test_get_autopilot_capabilities),
+
+            ("InitialMode",
+             "Test initial mode switching",
+             self.test_initial_mode),
         ]
 
     def post_tests_announcements(self):
