@@ -14,7 +14,10 @@
 
 MAV_TYPE GCS_Copter::frame_type() const
 {
-    return copter.get_frame_mav_type();
+    if (copter.motors == nullptr) {
+        return MAV_TYPE_GENERIC;
+    }
+    return copter.motors->get_frame_mav_type();
 }
 
 MAV_MODE GCS_MAVLINK_Copter::base_mode() const
@@ -93,6 +96,12 @@ void GCS_MAVLINK_Copter::send_position_target_global_int()
     if (!copter.flightmode->get_wp(target)) {
         return;
     }
+
+    // convert altitude frame to AMSL (this may use the terrain database)
+    if (!target.change_alt_frame(Location::AltFrame::ABSOLUTE)) {
+        return;
+    }
+
     mavlink_msg_position_target_global_int_send(
         chan,
         AP_HAL::millis(), // time_boot_ms
@@ -545,7 +554,12 @@ bool GCS_MAVLINK_Copter::params_ready() const
 void GCS_MAVLINK_Copter::send_banner()
 {
     GCS_MAVLINK::send_banner();
-    send_text(MAV_SEVERITY_INFO, "Frame: %s", copter.get_frame_string());
+    if (copter.motors == nullptr) {
+        send_text(MAV_SEVERITY_INFO, "motors not allocated");
+        return;
+    }
+    send_text(MAV_SEVERITY_INFO, "Frame: %s/%s", copter.motors->get_frame_string(),
+                                                 copter.motors->get_type_string());
 }
 
 // a RC override message is considered to be a 'heartbeat' from the ground station for failsafe purposes
@@ -689,11 +703,6 @@ MAV_RESULT GCS_MAVLINK_Copter::handle_command_mount(const mavlink_command_long_t
     return GCS_MAVLINK::handle_command_mount(packet);
 }
 
-bool GCS_MAVLINK_Copter::allow_disarm() const
-{
-    return copter.ap.land_complete;
-}
-
 MAV_RESULT GCS_MAVLINK_Copter::handle_command_long_packet(const mavlink_command_long_t &packet)
 {
     switch(packet.command) {
@@ -767,7 +776,7 @@ MAV_RESULT GCS_MAVLINK_Copter::handle_command_long_packet(const mavlink_command_
         return MAV_RESULT_FAILED;
 
     case MAV_CMD_DO_CHANGE_SPEED:
-        // param1 : unused
+        // param1 : Speed type (0=Airspeed, 1=Ground Speed, 2=Climb Speed, 3=Descent Speed)
         // param2 : new speed in m/s
         // param3 : unused
         // param4 : unused
@@ -1338,22 +1347,17 @@ void GCS_MAVLINK_Copter::handleMessage(const mavlink_message_t &msg)
 
 
 MAV_RESULT GCS_MAVLINK_Copter::handle_flight_termination(const mavlink_command_long_t &packet) {
-    MAV_RESULT result = MAV_RESULT_FAILED;
-
 #if ADVANCED_FAILSAFE == ENABLED
-    if (GCS_MAVLINK::handle_flight_termination(packet) != MAV_RESULT_ACCEPTED) {
-#endif
-        if (packet.param1 > 0.5f) {
-            copter.arming.disarm(AP_Arming::Method::TERMINATION);
-            result = MAV_RESULT_ACCEPTED;
-        }
-#if ADVANCED_FAILSAFE == ENABLED
-    } else {
-        result = MAV_RESULT_ACCEPTED;
+    if (GCS_MAVLINK::handle_flight_termination(packet) == MAV_RESULT_ACCEPTED) {
+        return MAV_RESULT_ACCEPTED;
     }
 #endif
+    if (packet.param1 > 0.5f) {
+        copter.arming.disarm(AP_Arming::Method::TERMINATION);
+        return MAV_RESULT_ACCEPTED;
+    }
 
-    return result;
+    return MAV_RESULT_FAILED;
 }
 
 float GCS_MAVLINK_Copter::vfr_hud_alt() const

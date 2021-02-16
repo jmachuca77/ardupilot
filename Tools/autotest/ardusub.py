@@ -3,11 +3,17 @@
 # Dive ArduSub in SITL
 from __future__ import print_function
 import os
+import sys
+import time
 
 from pymavlink import mavutil
 
 from common import AutoTest
 from common import NotAchievedException
+from common import AutoTestTimeoutException
+
+if sys.version_info[0] < 3:
+    ConnectionResetError = AutoTestTimeoutException
 
 # get location of scripts
 testdir = os.path.dirname(os.path.realpath(__file__))
@@ -62,12 +68,6 @@ class AutoTestSub(AutoTest):
 
     def default_frame(self):
         return 'vectored'
-
-    def init(self):
-        super(AutoTestSub, self).init()
-
-        # FIXME:
-        self.set_parameter("FS_GCS_ENABLE", 0)
 
     def is_sub(self):
         return True
@@ -237,6 +237,12 @@ class AutoTestSub(AutoTest):
         self.disarm_vehicle()
         self.progress("Manual dive OK")
 
+        m = self.mav.recv_match(type='SCALED_PRESSURE3', blocking=True)
+        if m is None:
+            raise NotAchievedException("Did not get SCALED_PRESSURE3")
+        if m.temperature != 2650:
+            raise NotAchievedException("Did not get correct TSYS01 temperature")
+
     def dive_mission(self, filename):
         self.progress("Executing mission %s" % filename)
         self.load_mission(filename)
@@ -273,7 +279,8 @@ class AutoTestSub(AutoTest):
             self.mavproxy.expect("Gripper Grabbed")
             self.mavproxy.expect("Gripper Released")
         except Exception as e:
-            self.progress("Exception caught")
+            self.progress("Exception caught: %s" % (
+                self.get_exception_stacktrace(e)))
             ex = e
         if ex is not None:
             raise ex
@@ -325,12 +332,49 @@ class AutoTestSub(AutoTest):
 
     def reboot_sitl(self):
         """Reboot SITL instance and wait it to reconnect."""
-        self.mavproxy.send("reboot\n")
-        self.mavproxy.expect("Init ArduSub")
-        # empty mav to avoid getting old timestamps:
-        while self.mav.recv_match(blocking=False):
-            pass
+        # out battery is reset to full on reboot.  So reduce it to 10%
+        # and wait for it to go above 50.
+        self.run_cmd(mavutil.mavlink.MAV_CMD_BATTERY_RESET,
+                     255,  # battery mask
+                     10,  # percentage
+                     0,
+                     0,
+                     0,
+                     0,
+                     0,
+                     0)
+        self.run_cmd_reboot()
+        tstart = time.time()
+        while True:
+            if time.time() - tstart > 30:
+                raise NotAchievedException("Did not detect reboot")
+            # ask for the message:
+            batt = None
+            try:
+                self.send_cmd(mavutil.mavlink.MAV_CMD_REQUEST_MESSAGE,
+                              mavutil.mavlink.MAVLINK_MSG_ID_BATTERY_STATUS,
+                              0,
+                              0,
+                              0,
+                              0,
+                              0,
+                              0)
+                batt = self.mav.recv_match(type='BATTERY_STATUS',
+                                           blocking=True,
+                                           timeout=1)
+            except ConnectionResetError as e:
+                pass
+            self.progress("Battery: %s" % str(batt))
+            if batt is None:
+                continue
+            if batt.battery_remaining > 50:
+                break
         self.initialise_after_reboot_sitl()
+
+    def apply_defaultfile_parameters(self):
+        super(AutoTestSub, self).apply_defaultfile_parameters()
+        # FIXME:
+        self.set_parameter("FS_GCS_ENABLE", 0)
 
     def disabled_tests(self):
         ret = super(AutoTestSub, self).disabled_tests()

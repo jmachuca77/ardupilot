@@ -321,7 +321,9 @@ void Scheduler::_timer_thread(void *arg)
         sched->_run_timers();
 
         // process any pending RC output requests
-        hal.rcout->timer_tick();
+        if (sched->is_system_initialized()) {
+            hal.rcout->timer_tick();
+        }
 
         if (sched->in_expected_delay()) {
             sched->watchdog_pat();
@@ -565,10 +567,10 @@ void Scheduler::_storage_thread(void* arg)
     }
 }
 
-void Scheduler::system_initialized()
+void Scheduler::set_system_initialized()
 {
     if (_initialized) {
-        AP_HAL::panic("PANIC: scheduler::system_initialized called"
+        AP_HAL::panic("PANIC: scheduler::set_system_initialized called"
                       "more than once");
     }
     _initialized = true;

@@ -71,53 +71,52 @@ const AP_Param::GroupInfo AP_Button::var_info[] = {
 
     // @Param: OPTIONS1
     // @DisplayName: Button Pin 1 Options
-    // @Description: Options for Pin 1
+    // @Description: Options for Pin 1. PWM input detects PWM above or below 1800/1200us instead of logic level. Invert changes HIGH state to be logic low voltage on pin, or below 1200us, if PWM input.
     // @User: Standard
     // @Bitmask: 0:PWM Input,1:InvertInput
     AP_GROUPINFO("OPTIONS1",  6, AP_Button, options[0], 0),
 
     // @Param: OPTIONS2
     // @DisplayName: Button Pin 2 Options
-    // @Description: Options for Pin 2
+    // @Description: Options for Pin 2. PWM input detects PWM above or below 1800/1200us instead of logic level. Invert changes HIGH state to be logic low voltage on pin, or below 1200us, if PWM input.
     // @User: Standard
     // @Bitmask: 0:PWM Input,1:InvertInput
     AP_GROUPINFO("OPTIONS2",  7, AP_Button, options[1], 0),
 
     // @Param: OPTIONS3
     // @DisplayName: Button Pin 3 Options
-    // @Description: Options for Pin 3
-    // @User: Standard
+    // @Description: Options for Pin 3. PWM input detects PWM above or below 1800/1200us instead of logic level. Invert changes HIGH state to be logic low voltage on pin, or below 1200us, if PWM input.
     // @Bitmask: 0:PWM Input,1:InvertInput
     AP_GROUPINFO("OPTIONS3",  8, AP_Button, options[2], 0),
 
     // @Param: OPTIONS4
     // @DisplayName: Button Pin 4 Options
-    // @Description: Options for Pin 4
+    // @Description: Options for Pin 4. PWM input detects PWM above or below 1800/1200us instead of logic level. Invert changes HIGH state to be logic low voltage on pin, or below 1200us, if PWM input.
     // @User: Standard
     // @Bitmask: 0:PWM Input,1:InvertInput
     AP_GROUPINFO("OPTIONS4",  9, AP_Button, options[3], 0),
 
     // @Param: FUNC1
     // @DisplayName: Button Pin 1 RC Channel function
-    // @Description: Function executed on pin change
+    // @Description: Auxiliary RC Options function executed on pin change
     // @User: Standard
     AP_GROUPINFO("FUNC1",  10, AP_Button, pin_func[0], (uint16_t)RC_Channel::AUX_FUNC::DO_NOTHING),
 
     // @Param: FUNC2
     // @DisplayName: Button Pin 2 RC Channel function
-    // @Description: Function executed on pin change
+    // @Description: Auxiliary RC Options function executed on pin change
     // @User: Standard
     AP_GROUPINFO("FUNC2",  11, AP_Button, pin_func[1], (uint16_t)RC_Channel::AUX_FUNC::DO_NOTHING),
 
     // @Param: FUNC3
     // @DisplayName: Button Pin 3 RC Channel function
-    // @Description: Function executed on pin change
+    // @Description: Auxiliary RC Options function executed on pin change
     // @User: Standard
     AP_GROUPINFO("FUNC3",  12, AP_Button, pin_func[2], (uint16_t)RC_Channel::AUX_FUNC::DO_NOTHING),
 
     // @Param: FUNC4
     // @DisplayName: Button Pin 4 RC Channel function
-    // @Description: Function executed on pin change
+    // @Description: Auxiliary RC Options function executed on pin change
     // @User: Standard
     AP_GROUPINFO("FUNC4",  13, AP_Button, pin_func[3], (uint16_t)RC_Channel::AUX_FUNC::DO_NOTHING),
 
@@ -180,12 +179,12 @@ void AP_Button::update(void)
         // these values are the same as used in RC_Channel:
         if (pwm_state & mask) {
             // currently asserted; check to see if we should de-assert
-            if (pwm_us < RC_Channel::AUX_PWM_TRIGGER_LOW) {
+            if (pwm_us < RC_Channel::AUX_SWITCH_PWM_TRIGGER_LOW) {
                 new_pwm_state &= ~mask;
             }
         } else {
             // currently not asserted; check to see if we should assert
-            if (pwm_us > RC_Channel::AUX_PWM_TRIGGER_HIGH) {
+            if (pwm_us > RC_Channel::AUX_SWITCH_PWM_TRIGGER_HIGH) {
                 new_pwm_state |= mask;
             }
         }
@@ -324,7 +323,7 @@ void AP_Button::timer_update(void)
 /*
   send a BUTTON_CHANGE report to the GCS
  */
-void AP_Button::send_report(void)
+void AP_Button::send_report(void) const
 {
     const uint8_t mask = last_mask | pwm_state;
     const mavlink_button_change_t packet{

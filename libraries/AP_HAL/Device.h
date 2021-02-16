@@ -33,6 +33,7 @@ public:
         BUS_TYPE_UAVCAN  = 3,
         BUS_TYPE_SITL    = 4,
         BUS_TYPE_MSP     = 5,
+        BUS_TYPE_SERIAL  = 6,
     };
 
     enum Speed {
@@ -77,9 +78,7 @@ public:
 
 
     virtual ~Device() {
-        if (_checked.regs != nullptr) {
-            delete[] _checked.regs;
-        }
+        delete[] _checked.regs;
     }
 
     /*
@@ -320,7 +319,7 @@ public:
     /**
      * return bus ID with a new devtype
      */
-    uint32_t get_bus_id_devtype(uint8_t devtype) {
+    uint32_t get_bus_id_devtype(uint8_t devtype) const {
         return change_bus_id(get_bus_id(), devtype);
     }
 

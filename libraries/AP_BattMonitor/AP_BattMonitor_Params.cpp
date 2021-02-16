@@ -184,6 +184,12 @@ const AP_Param::GroupInfo AP_BattMonitor_Params::var_info[] = {
     // @Increment: 0.1
     // @User: Advanced
     AP_GROUPINFO("VOLT_EMPTY", 31, AP_BattMonitor_Params, _voltage_empty, 0),
+    // @Param: OPTIONS
+    // @DisplayName: Battery monitor options
+    // @Description: This sets options to change the behaviour of the battery monitor
+    // @Bitmask: 1:IgnoreUAVCAN SoC
+    // @User: Advanced
+    AP_GROUPINFO("OPTIONS", 21, AP_BattMonitor_Params, _options, 0),
 
     AP_GROUPEND
 

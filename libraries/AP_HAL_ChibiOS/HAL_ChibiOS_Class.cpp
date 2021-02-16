@@ -221,6 +221,10 @@ static void main_loop()
 
     g_callbacks->setup();
 
+#if HAL_ENABLE_SAVE_PERSISTENT_PARAMS
+    utilInstance.apply_persistent_params();
+#endif
+
 #ifdef IOMCU_FW
     stm32_watchdog_init();
 #elif !defined(HAL_BOOTLOADER_BUILD)
@@ -236,7 +240,7 @@ static void main_loop()
 
     schedulerInstance.watchdog_pat();
 
-    hal.scheduler->system_initialized();
+    hal.scheduler->set_system_initialized();
 
     thread_running = true;
     chRegSetThreadName(SKETCHNAME);

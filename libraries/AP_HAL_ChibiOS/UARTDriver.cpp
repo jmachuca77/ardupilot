@@ -65,7 +65,7 @@ UARTDriver *UARTDriver::uart_drivers[UART_MAX_DRIVERS];
 #endif
 
 #ifndef HAL_UART_STACK_SIZE
-#define HAL_UART_STACK_SIZE 2048
+#define HAL_UART_STACK_SIZE 1536
 #endif
 
 UARTDriver::UARTDriver(uint8_t _serial_num) :
@@ -829,6 +829,19 @@ void UARTDriver::write_pending_bytes_DMA(uint32_t n)
     if (tx_len == 0) {
         return;
     }
+
+    if (_flow_control != FLOW_CONTROL_DISABLE &&
+        sdef.cts_line != 0 &&
+        palReadLine(sdef.cts_line)) {
+        // we are using hw flow control and the CTS line is high. We
+        // will hold off trying to transmit until the CTS line goes
+        // low to indicate the receiver has space. We do this before
+        // we take the DMA lock to prevent a high CTS line holding a
+        // DMA channel that may be needed by another device
+        tx_len = 0;
+        return;
+    }
+
     if (!dma_handle->lock_nonblock()) {
         tx_len = 0;
         return;

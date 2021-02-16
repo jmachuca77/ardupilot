@@ -679,7 +679,7 @@ def write_mcu_config(f):
     if get_config('PROCESS_STACK', required=False):
         env_vars['PROCESS_STACK'] = get_config('PROCESS_STACK')
     else:
-        env_vars['PROCESS_STACK'] = "0x2000"
+        env_vars['PROCESS_STACK'] = "0x1C00"
 
     # MAIN_STACK is location of initial stack on startup and is also the stack
     # used for slow interrupts. It needs to be big enough for maximum interrupt
@@ -751,6 +751,12 @@ def write_mcu_config(f):
     f.write('\n// APJ board ID (for bootloaders)\n')
     f.write('#define APJ_BOARD_ID %s\n' % get_config('APJ_BOARD_ID'))
 
+    f.write('''
+#ifndef HAL_ENABLE_THREAD_STATISTICS
+#define HAL_ENABLE_THREAD_STATISTICS FALSE
+#endif
+    ''')
+
     lib = get_mcu_lib(mcu_type)
     build_info = lib.build
 
@@ -797,7 +803,6 @@ def write_mcu_config(f):
 #define HAL_NO_UARTDRIVER
 #define HAL_NO_PRINTF
 #define HAL_NO_CCM
-#define CH_DBG_STATISTICS FALSE
 #define CH_CFG_USE_TM FALSE
 #define CH_CFG_USE_REGISTRY FALSE
 #define CH_CFG_USE_WAITEXIT FALSE
@@ -1209,6 +1214,7 @@ def write_UART_config(f):
         tx_line = make_line(dev + '_TX')
         rx_line = make_line(dev + '_RX')
         rts_line = make_line(dev + '_RTS')
+        cts_line = make_line(dev + '_CTS')
         if rts_line != "0":
             have_rts_cts = True
             f.write('#define HAL_HAVE_RTSCTS_SERIAL%u\n' % uart_serial_num[dev])
@@ -1229,10 +1235,10 @@ def write_UART_config(f):
                 "#define HAL_%s_CONFIG { (BaseSequentialStream*) &SD%u, %u, false, "
                 % (dev, n, n))
             if mcu_series.startswith("STM32F1"):
-                f.write("%s, %s, %s, " % (tx_line, rx_line, rts_line))
+                f.write("%s, %s, %s, %s, " % (tx_line, rx_line, rts_line, cts_line))
             else:
-                f.write("STM32_%s_RX_DMA_CONFIG, STM32_%s_TX_DMA_CONFIG, %s, %s, %s, " %
-                        (dev, dev, tx_line, rx_line, rts_line))
+                f.write("STM32_%s_RX_DMA_CONFIG, STM32_%s_TX_DMA_CONFIG, %s, %s, %s, %s, " %
+                        (dev, dev, tx_line, rx_line, rts_line, cts_line))
 
             # add inversion pins, if any
             f.write("%d, " % get_gpio_bylabel(dev + "_RXINV"))
@@ -1357,8 +1363,10 @@ def write_PWM_config(f):
     rc_in = None
     rc_in_int = None
     alarm = None
+    bidir = None
     pwm_out = []
     pwm_timers = []
+    has_bidir = False
     for l in bylabel.keys():
         p = bylabel[l]
         if p.type.startswith('TIM'):
@@ -1371,6 +1379,8 @@ def write_PWM_config(f):
             else:
                 if p.extra_value('PWM', type=int) is not None:
                     pwm_out.append(p)
+                if p.has_extra('BIDIR'):
+                    bidir = p
                 if p.type not in pwm_timers:
                     pwm_timers.append(p.type)
 
@@ -1455,6 +1465,8 @@ def write_PWM_config(f):
     f.write('\n')
 
     f.write('// PWM timer config\n')
+    if bidir is not None:
+        f.write('#define HAL_WITH_BIDIR_DSHOT\n')
     for t in sorted(pwm_timers):
         n = int(t[3:])
         f.write('#define STM32_PWM_USE_TIM%u TRUE\n' % n)
@@ -1494,11 +1506,27 @@ def write_PWM_config(f):
             advanced_timer = 'false'
         pwm_clock = 1000000
         period = 20000 * pwm_clock / 1000000
+        hal_icu_def = ''
+        hal_icu_cfg = ''
+        if bidir is not None:
+            hal_icu_cfg = '\n          {'
+            hal_icu_def = '\n'
+            for i in range(1,5):
+                hal_icu_cfg += '{HAL_IC%u_CH%u_DMA_CONFIG},' % (n, i)
+                hal_icu_def +='''#if defined(STM32_TIM_TIM%u_CH%u_DMA_STREAM) && defined(STM32_TIM_TIM%u_CH%u_DMA_CHAN)
+# define HAL_IC%u_CH%u_DMA_CONFIG true, STM32_TIM_TIM%u_CH%u_DMA_STREAM, STM32_TIM_TIM%u_CH%u_DMA_CHAN
+#else
+# define HAL_IC%u_CH%u_DMA_CONFIG false, 0, 0
+#endif
+''' % (n, i, n, i, n, i, n, i, n, i, n, i)
+            hal_icu_cfg += '},  \\'
+
+
         f.write('''#if defined(STM32_TIM_TIM%u_UP_DMA_STREAM) && defined(STM32_TIM_TIM%u_UP_DMA_CHAN)
 # define HAL_PWM%u_DMA_CONFIG true, STM32_TIM_TIM%u_UP_DMA_STREAM, STM32_TIM_TIM%u_UP_DMA_CHAN
 #else
 # define HAL_PWM%u_DMA_CONFIG false, 0, 0
-#endif\n''' % (n, n, n, n, n, n))
+#endif\n%s''' % (n, n, n, n, n, n, hal_icu_def))
         f.write('''#define HAL_PWM_GROUP%u { %s, \\
         {%u, %u, %u, %u}, \\
         /* Group Initial Config */ \\
@@ -1513,14 +1541,14 @@ def write_PWM_config(f):
            {%s, NULL}, \\
            {%s, NULL}  \\
           }, 0, 0}, &PWMD%u, \\
-          HAL_PWM%u_DMA_CONFIG, \\
+          HAL_PWM%u_DMA_CONFIG, \\%s
           { %u, %u, %u, %u }, \\
           { %s, %s, %s, %s }}\n''' %
                 (group, advanced_timer,
                  chan_list[0], chan_list[1], chan_list[2], chan_list[3],
                  pwm_clock, period,
                  chan_mode[0], chan_mode[1], chan_mode[2], chan_mode[3],
-                 n, n,
+                 n, n, hal_icu_cfg,
                  alt_functions[0], alt_functions[1], alt_functions[2], alt_functions[3],
                  pal_lines[0], pal_lines[1], pal_lines[2], pal_lines[3]))
     f.write('#define HAL_PWM_GROUPS %s\n\n' % ','.join(groups))
@@ -1854,6 +1882,9 @@ def build_peripheral_list():
             periph_pins.append(altmap[alt][p])
     for p in periph_pins:
         type = p.type
+        if type.startswith('TIM'):
+            # we need to independently demand DMA for each channel
+            type = p.label
         if type in done:
             continue
         for prefix in prefixes:
@@ -1884,9 +1915,13 @@ def build_peripheral_list():
                 peripherals.append(label)
             elif not p.has_extra('ALARM') and not p.has_extra('RCININT'):
                 # get the TIMn_UP DMA channels for DShot
-                label = type + '_UP'
+                label = p.type + '_UP'
                 if label not in peripherals and not p.has_extra('NODMA'):
                     peripherals.append(label)
+                ch_label = type
+                (_, _, compl) = parse_timer(ch_label)
+                if ch_label not in peripherals and p.has_extra('BIDIR') and not compl:
+                    peripherals.append(ch_label)
         done.add(type)
     return peripherals
 
@@ -2019,27 +2054,30 @@ def process_line(line):
     elif a[0] == 'ROMFS_WILDCARD':
         romfs_wildcard(a[1])
     elif a[0] == 'undef':
-        print("Removing %s" % a[1])
-        config.pop(a[1], '')
-        bytype.pop(a[1], '')
-        bylabel.pop(a[1], '')
-        # also remove all occurences of defines in previous lines if any
-        for line in alllines[:]:
-            if line.startswith('define') and a[1] == line.split()[1]:
-                alllines.remove(line)
-        newpins = []
-        for pin in allpins:
-            if pin.type == a[1] or pin.label == a[1] or pin.portpin == a[1]:
-                portmap[pin.port][pin.pin] = generic_pin(pin.port, pin.pin, None, 'INPUT', [])
-                continue
-            newpins.append(pin)
-        allpins = newpins
-        if a[1] == 'IMU':
-            imu_list = []
-        if a[1] == 'COMPASS':
-            compass_list = []
-        if a[1] == 'BARO':
-            baro_list = []
+        for u in a[1:]:
+            print("Removing %s" % u)
+            config.pop(u, '')
+            bytype.pop(u, '')
+            bylabel.pop(u, '')
+            # also remove all occurences of defines in previous lines if any
+            for line in alllines[:]:
+                if line.startswith('define') and u == line.split()[1]:
+                    alllines.remove(line)
+            newpins = []
+            for pin in allpins:
+                if pin.type == u or pin.label == u or pin.portpin == u:
+                    if pin.label is not None:
+                        bylabel.pop(pin.label, '')
+                    portmap[pin.port][pin.pin] = generic_pin(pin.port, pin.pin, None, 'INPUT', [])
+                    continue
+                newpins.append(pin)
+            allpins = newpins
+            if u == 'IMU':
+                imu_list = []
+            if u == 'COMPASS':
+                compass_list = []
+            if u == 'BARO':
+                baro_list = []
     elif a[0] == 'env':
         print("Adding environment %s" % ' '.join(a[1:]))
         if len(a[1:]) < 2:
@@ -2054,6 +2092,7 @@ def process_file(filename):
     except Exception:
         error("Unable to open file %s" % filename)
     for line in f.readlines():
+        line = line.split('#')[0] # ensure we discard the comments
         line = line.strip()
         if len(line) == 0 or line[0] == '#':
             continue

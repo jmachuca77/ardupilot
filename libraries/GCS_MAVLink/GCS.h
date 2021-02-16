@@ -243,6 +243,7 @@ public:
     virtual void send_scaled_pressure3(); // allow sub to override this
     void send_sensor_offsets();
     virtual void send_simstate() const;
+    void send_sim_state() const;
     void send_ahrs();
     void send_battery2();
     void send_opticalflow();
@@ -335,6 +336,7 @@ public:
 
     virtual uint64_t capabilities() const;
     uint16_t get_stream_slowdown_ms() const { return stream_slowdown_ms; }
+    uint8_t get_last_txbuf() const { return last_txbuf; }
 
     MAV_RESULT set_message_interval(uint32_t msg_id, int32_t interval_us);
 
@@ -347,7 +349,7 @@ protected:
 
     // overridable method to check for packet acceptance. Allows for
     // enforcement of GCS sysid
-    bool accept_packet(const mavlink_status_t &status, const mavlink_message_t &msg);
+    bool accept_packet(const mavlink_status_t &status, const mavlink_message_t &msg) const;
     void set_ekf_origin(const Location& loc);
 
     virtual MAV_MODE base_mode() const = 0;
@@ -381,12 +383,13 @@ protected:
     virtual bool set_home_to_current_location(bool lock) = 0;
     virtual bool set_home(const Location& loc, bool lock) = 0;
 
+    virtual MAV_RESULT handle_command_component_arm_disarm(const mavlink_command_long_t &packet);
     MAV_RESULT handle_command_do_set_home(const mavlink_command_long_t &packet);
 
     void handle_mission_request_list(const mavlink_message_t &msg);
-    void handle_mission_request(const mavlink_message_t &msg);
-    void handle_mission_request_int(const mavlink_message_t &msg);
-    void handle_mission_clear_all(const mavlink_message_t &msg);
+    void handle_mission_request(const mavlink_message_t &msg) const;
+    void handle_mission_request_int(const mavlink_message_t &msg) const;
+    void handle_mission_clear_all(const mavlink_message_t &msg) const;
     virtual void handle_mission_set_current(AP_Mission &mission, const mavlink_message_t &msg);
     void handle_mission_count(const mavlink_message_t &msg);
     void handle_mission_write_partial_list(const mavlink_message_t &msg);
@@ -394,8 +397,9 @@ protected:
 
     void handle_distance_sensor(const mavlink_message_t &msg);
     void handle_obstacle_distance(const mavlink_message_t &msg);
+    void handle_obstacle_distance_3d(const mavlink_message_t &msg);
 
-    void handle_osd_param_config(const mavlink_message_t &msg);
+    void handle_osd_param_config(const mavlink_message_t &msg) const;
 
     void handle_common_param_message(const mavlink_message_t &msg);
     void handle_param_set(const mavlink_message_t &msg);
@@ -406,7 +410,7 @@ protected:
     void handle_system_time_message(const mavlink_message_t &msg);
     void handle_common_rally_message(const mavlink_message_t &msg);
     void handle_rally_fetch_point(const mavlink_message_t &msg);
-    void handle_rally_point(const mavlink_message_t &msg);
+    void handle_rally_point(const mavlink_message_t &msg) const;
     virtual void handle_mount_message(const mavlink_message_t &msg);
     void handle_fence_message(const mavlink_message_t &msg);
     void handle_param_value(const mavlink_message_t &msg);
@@ -416,7 +420,7 @@ protected:
 
     void handle_common_message(const mavlink_message_t &msg);
     void handle_set_gps_global_origin(const mavlink_message_t &msg);
-    void handle_setup_signing(const mavlink_message_t &msg);
+    void handle_setup_signing(const mavlink_message_t &msg) const;
     virtual MAV_RESULT handle_preflight_reboot(const mavlink_command_long_t &packet);
 
     MAV_RESULT handle_engine_control(const mavlink_command_long_t &packet);
@@ -453,7 +457,7 @@ protected:
         const uint16_t interval_ms = 10000;
     }  _timesync_request;
 
-    void handle_statustext(const mavlink_message_t &msg);
+    void handle_statustext(const mavlink_message_t &msg) const;
 
     bool telemetry_delayed() const;
     virtual uint32_t telem_delay() const = 0;
@@ -485,6 +489,7 @@ protected:
     MAV_RESULT handle_command_do_set_roi(const mavlink_command_long_t &packet);
     virtual MAV_RESULT handle_command_do_set_roi(const Location &roi_loc);
     MAV_RESULT handle_command_do_gripper(const mavlink_command_long_t &packet);
+    MAV_RESULT handle_command_do_sprayer(const mavlink_command_long_t &packet);
     MAV_RESULT handle_command_do_set_mode(const mavlink_command_long_t &packet);
     MAV_RESULT handle_command_get_home_position(const mavlink_command_long_t &packet);
     MAV_RESULT handle_command_do_fence_enable(const mavlink_command_long_t &packet);
@@ -514,8 +519,6 @@ protected:
 
     static constexpr const float magic_force_arm_value = 2989.0f;
     static constexpr const float magic_force_disarm_value = 21196.0f;
-
-    virtual bool allow_disarm() const { return true; }
 
     void manual_override(RC_Channel *c, int16_t value_in, uint16_t offset, float scaler, const uint32_t tnow, bool reversed = false);
 
@@ -577,6 +580,8 @@ private:
 
     // number of extra ms to add to slow things down for the radio
     uint16_t         stream_slowdown_ms;
+    // last reported radio buffer percent available
+    uint8_t          last_txbuf = 100;
 
     // perf counters
     AP_HAL::Util::perf_counter_t _perf_packet;
@@ -910,7 +915,7 @@ public:
     static MissionItemProtocol_Rally *_missionitemprotocol_rally;
     static MissionItemProtocol_Fence *_missionitemprotocol_fence;
     MissionItemProtocol *get_prot_for_mission_type(const MAV_MISSION_TYPE mission_type) const;
-    void try_send_queued_message_for_type(MAV_MISSION_TYPE type);
+    void try_send_queued_message_for_type(MAV_MISSION_TYPE type) const;
 
     void update_send();
     void update_receive();

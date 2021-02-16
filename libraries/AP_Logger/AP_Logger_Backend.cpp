@@ -44,7 +44,7 @@ const struct MultiplierStructure *AP_Logger_Backend::multiplier(uint8_t num) con
     return _front.multiplier(num);
 }
 
-AP_Logger_Backend::vehicle_startup_message_Writer AP_Logger_Backend::vehicle_message_writer() {
+AP_Logger_Backend::vehicle_startup_message_Writer AP_Logger_Backend::vehicle_message_writer() const {
     return _front._vehicle_messages;
 }
 
@@ -323,7 +323,9 @@ bool AP_Logger_Backend::Write(const uint8_t msg_type, va_list arg_list, bool is_
         }
         if (charlen != 0) {
             char *tmp = va_arg(arg_list, char*);
-            memcpy(&buffer[offset], tmp, charlen);
+            uint8_t len = strnlen(tmp, charlen);
+            memcpy(&buffer[offset], tmp, len);
+            memset(&buffer[offset+len], 0, charlen-len);
             offset += charlen;
         }
     }
