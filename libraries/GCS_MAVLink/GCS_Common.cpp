@@ -3207,7 +3207,7 @@ void GCS_MAVLINK::handle_rc_channels_override(const mavlink_message_t &msg)
             // per the mavlink spec, a value of UINT16_MAX-1 means
             // return the field to RC radio values:
             const uint16_t value = override_data[i] == (UINT16_MAX-1) ? 0 : override_data[i];
-            RC_Channels::set_override(i, value, tnow);
+            RC_Channels::set_override(i, value, MAVLINK_MSG_ID_RC_CHANNELS_OVERRIDE, tnow);
         }
     }
 }
