@@ -660,12 +660,12 @@ void AC_Avoid::adjust_velocity_circle_fence(float kP, float accel_cmss, Vector2f
     const AP_AHRS &_ahrs = AP::ahrs();
 
     // get position as a 2D offset from ahrs home
-    Vector2f position_xy_cm;
-    if (!_ahrs.get_relative_position_NE_home(position_xy_cm)) {
+    Vector2f position_xy;
+    if (!_ahrs.get_relative_position_NE_home(position_xy)) {
         // we have no idea where we are....
         return;
     }
-    position_xy_cm = position_xy_cm * 100.0f; // m -> cm
+    position_xy = position_xy * 100.0f; // m -> cm
 
     // get the fence radius in cm
     const float fence_radius = _fence.get_radius() * 100.0f;
@@ -677,7 +677,7 @@ void AC_Avoid::adjust_velocity_circle_fence(float kP, float accel_cmss, Vector2f
     }
 
     // get vehicle distance from home
-    const float dist_from_home = position_xy_cm.length();
+    const float dist_from_home = position_xy.length();
     if (dist_from_home > fence_radius) {
         // outside of circular fence, no velocity adjustments
         return;
@@ -698,7 +698,7 @@ void AC_Avoid::adjust_velocity_circle_fence(float kP, float accel_cmss, Vector2f
     switch (_behavior) {
     case BEHAVIOR_SLIDE: {
         // implement sliding behaviour
-        const Vector2f stopping_point = position_xy_cm + desired_vel_cms*(get_stopping_distance(kP, accel_cmss, desired_speed)/desired_speed);
+        const Vector2f stopping_point = position_xy + desired_vel_cms*(get_stopping_distance(kP, accel_cmss, desired_speed)/desired_speed);
         const float stopping_point_dist_from_home = stopping_point.length();
         if (stopping_point_dist_from_home <= fence_radius - margin_cm) {
             // stopping before before fence so no need to adjust
@@ -708,7 +708,7 @@ void AC_Avoid::adjust_velocity_circle_fence(float kP, float accel_cmss, Vector2f
         // Project stopping point radially onto fence boundary
         // Adjusted velocity will point towards this projected point at a safe speed
         const Vector2f target_offset = stopping_point * ((fence_radius - margin_cm) / stopping_point_dist_from_home);
-        const Vector2f target_direction = target_offset - position_xy_cm;
+        const Vector2f target_direction = target_offset - position_xy;
         const float distance_to_target = target_direction.length();
         if (is_positive(distance_to_target)) {
             const float max_speed = get_max_speed(kP, accel_cmss, distance_to_target, dt);
@@ -720,7 +720,7 @@ void AC_Avoid::adjust_velocity_circle_fence(float kP, float accel_cmss, Vector2f
     case (BEHAVIOR_STOP): {
         // implement stopping behaviour
         // calculate stopping point plus a margin so we look forward far enough to intersect with circular fence
-        const Vector2f stopping_point_plus_margin = position_xy_cm + desired_vel_cms*((2.0f + margin_cm + get_stopping_distance(kP, accel_cmss, desired_speed))/desired_speed);
+        const Vector2f stopping_point_plus_margin = position_xy + desired_vel_cms*((2.0f + margin_cm + get_stopping_distance(kP, accel_cmss, desired_speed))/desired_speed);
         const float stopping_point_plus_margin_dist_from_home = stopping_point_plus_margin.length();
         if (dist_from_home >= fence_radius - margin_cm) {
             // vehicle has already breached margin around fence
@@ -737,8 +737,8 @@ void AC_Avoid::adjust_velocity_circle_fence(float kP, float accel_cmss, Vector2f
         } else {
             // shorten vector without adjusting its direction
             Vector2f intersection;
-            if (Vector2f::circle_segment_intersection(position_xy_cm, stopping_point_plus_margin, Vector2f(0.0f,0.0f), fence_radius - margin_cm, intersection)) {
-                const float distance_to_target = MAX((intersection - position_xy_cm).length() - margin_cm, 0.0f);
+            if (Vector2f::circle_segment_intersection(position_xy, stopping_point_plus_margin, Vector2f(0.0f,0.0f), fence_radius - margin_cm, intersection)) {
+                const float distance_to_target = MAX((intersection - position_xy).length() - margin_cm, 0.0f);
                 const float max_speed = get_max_speed(kP, accel_cmss, distance_to_target, dt);
                 if (max_speed < desired_speed) {
                     desired_vel_cms *= MAX(max_speed, 0.0f) / desired_speed;
@@ -1241,7 +1241,7 @@ void AC_Avoid::adjust_velocity_polygon(float kP, float accel_cmss, Vector2f &des
 
 
     // return if we have already breached polygon
-    const bool inside_polygon = !Polygon_outside(position_xy_cm, boundary, num_points);
+    const bool inside_polygon = !Polygon_outside(position_xy, boundary, num_points);
     if (inside_polygon != stay_inside) {
         return;
     }
@@ -1259,7 +1259,7 @@ void AC_Avoid::adjust_velocity_polygon(float kP, float accel_cmss, Vector2f &des
     const float speed = safe_vel.length();
     Vector2f stopping_point_plus_margin; 
     if (!desired_vel_cms.is_zero()) {
-        stopping_point_plus_margin = position_xy_cm + safe_vel*((2.0f + margin_cm + get_stopping_distance(kP, accel_cmss, speed))/speed);
+        stopping_point_plus_margin = position_xy + safe_vel*((2.0f + margin_cm + get_stopping_distance(kP, accel_cmss, speed))/speed);
     }
 
     // for backing away
@@ -1273,7 +1273,7 @@ void AC_Avoid::adjust_velocity_polygon(float kP, float accel_cmss, Vector2f &des
         // end points of current edge
         Vector2f start = boundary[j];
         Vector2f end = boundary[i];
-        Vector2f vector_to_boundary = Vector2f::closest_point(position_xy_cm, start, end) - position_xy_cm;
+        Vector2f vector_to_boundary = Vector2f::closest_point(position_xy, start, end) - position_xy;
         // back away if vehicle has breached margin
         if (is_negative(vector_to_boundary.length() - margin_cm)) {
             calc_backup_velocity_2D(kP, accel_cmss, quad_1_back_vel, quad_2_back_vel, quad_3_back_vel, quad_4_back_vel, margin_cm-vector_to_boundary.length(), vector_to_boundary, dt);
@@ -1305,9 +1305,9 @@ void AC_Avoid::adjust_velocity_polygon(float kP, float accel_cmss, Vector2f &des
         case (BEHAVIOR_STOP): {
             // find intersection with line segment
             Vector2f intersection;
-            if (Vector2f::segment_intersection(position_xy_cm, stopping_point_plus_margin, start, end, intersection)) {
+            if (Vector2f::segment_intersection(position_xy, stopping_point_plus_margin, start, end, intersection)) {
                 // vector from current position to point on current edge
-                Vector2f limit_direction = intersection - position_xy_cm;
+                Vector2f limit_direction = intersection - position_xy;
                 const float limit_distance_cm = limit_direction.length();
                 if (is_zero(limit_distance_cm)) {
                     // We are exactly on the edge - treat this as a fence breach.

@@ -42,6 +42,9 @@ public:
     // return true if any avoidance feature is enabled
     bool enabled() const { return _enabled != AC_AVOID_DISABLED; }
 
+    // return true is a specific, single or combination, of features are enabled
+    bool feature_is_enabled(uint8_t feature_mask) const { return enabled() && (_enabled & feature_mask) != 0; }
+
     // Adjusts the desired velocity so that the vehicle can stop
     // before the fence/object.
     // kP, accel_cmss are for the horizontal axis
