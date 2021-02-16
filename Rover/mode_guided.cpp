@@ -13,7 +13,7 @@ bool ModeGuided::_enter()
     // initialise waypoint speed
     g2.wp_nav.set_desired_speed_to_default();
 
-    sent_notification = false;
+    sent_notification = true;
 
     return true;
 }
