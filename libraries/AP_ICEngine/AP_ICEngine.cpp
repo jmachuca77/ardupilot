@@ -1393,6 +1393,9 @@ bool AP_ICEngine::set_ice_transmission_state(MAV_ICE_TRANSMISSION_GEAR_STATE gea
 */
 void AP_ICEngine::update_idle_governor(int8_t &min_throttle)
 {
+    if (!enable) {
+        return;
+    }
     const int8_t min_throttle_base = min_throttle;
 
     // Initialize idle point to min_throttle on the first run

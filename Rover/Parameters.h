@@ -332,8 +332,10 @@ public:
     // fence library
     AC_Fence fence;
 
+#if HAL_PROXIMITY_ENABLED
     // proximity library
     AP_Proximity proximity;
+#endif
 
     // avoidance library
     AC_Avoid avoid;
