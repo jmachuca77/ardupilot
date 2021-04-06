@@ -665,7 +665,7 @@ void AR_AttitudeControl::get_throttle_and_brake_out_stop(bool motor_limit_low, b
         _desired_speed = 0.0f;
         throttle_out = 0;
         brake_out = 0;
-        return 0.0f;
+        return;
     }
 
     // clear stopped system time
