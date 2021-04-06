@@ -552,11 +552,19 @@ void AP_UAVCAN::SRV_send_esc(void)
         for (uint8_t i = 0; i < max_esc_num && k < 20; i++) {
             if ((((uint32_t) 1) << i) & _esc_bm) {
                 // TODO: ESC negative scaling for reverse thrust and reverse rotation
-                float scaled = cmd_max * (hal.rcout->scale_esc_to_unity(_SRV_conf[i].pulse) + 1.0) / 2.0;
+                float scaled = cmd_max * (hal.rcout->scale_esc_to_unity(_SRV_conf[i].pulse));
 
-                scaled = constrain_float(scaled, 0, cmd_max);
+                // scaled = constrain_float(scaled, 0, cmd_max);
 
-                esc_msg.cmd.push_back(static_cast<int>(scaled));
+                // static uint32_t timeref;
+                // gcs().send_text_rate_limited(MAV_SEVERITY_INFO, 500, timeref,"Pulse: %d RCOut: %f Scaled Output: %f cmd_max=%d", (int)_SRV_conf[i].pulse, (double)hal.rcout->scale_esc_to_unity(_SRV_conf[i].pulse), (double)scaled, cmd_max);
+
+                // This check is needed to stop sending values when disarmed
+                 if (_SRV_conf[i].pulse != 0) {
+                     esc_msg.cmd.push_back(static_cast<int>(scaled));
+                 } else  {
+                     esc_msg.cmd.push_back(static_cast<int>(0));
+                 }
             } else {
                 esc_msg.cmd.push_back(static_cast<unsigned>(0));
             }
