@@ -384,7 +384,7 @@ void Rover::one_second_loop(void)
         SRV_Channel *c = SRV_Channels::srv_channel(servo_ch);
         const SRV_Channel::Aux_servo_function_t function = c->get_function();
         const uint8_t relay_num = 15 - servo_ch;
-        if (function != SRV_Channel::k_none && relay.enabled(relay_num)) {
+        if (function != SRV_Channel::k_none && relay.enabled(relay_num) && !relay.is_external_pin(relay_num)) {
             gcs().send_text(MAV_SEVERITY_INFO, "Disabling Relay pin %d, Servo %d Function is %d", relay_num, servo_ch, function);
             relay.set(relay_num, false);
         }

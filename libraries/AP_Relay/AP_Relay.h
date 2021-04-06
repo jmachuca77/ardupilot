@@ -45,6 +45,9 @@ public:
     // see if the relay is enabled
     bool        enabled(const uint8_t instance) { return instance < AP_RELAY_NUM_RELAYS && _pin[instance] != -1; }
 
+    // returns true if selected instance is configured as an external device
+    bool        is_external_pin(uint8_t instance) { return (instance < AP_RELAY_NUM_RELAYS) && (_pin[instance] >= AP_RELAY_EXTENRAL_PIN_FIRST) && (_pin[instance] <= AP_RELAY_EXTENRAL_PIN_LAST); }
+
 //    // disable the relay
 //    void        disable(uint8_t relay) { if (relay < AP_RELAY_NUM_RELAYS) { _pin[relay] = -1; } }
 //
@@ -102,10 +105,6 @@ private:
 
     void        init_hw();
     uint8_t     _external_instance_count;
-
-    // returns true if selected instance is configured as an external device
-    bool        is_external_pin(uint8_t instance) { return (instance < AP_RELAY_NUM_RELAYS) && (_pin[instance] >= AP_RELAY_EXTENRAL_PIN_FIRST) && (_pin[instance] <= AP_RELAY_EXTENRAL_PIN_LAST); }
-
 
 };
 
