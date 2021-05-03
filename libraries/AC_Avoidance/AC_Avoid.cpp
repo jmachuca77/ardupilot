@@ -78,7 +78,7 @@ const AP_Param::GroupInfo AC_Avoid::var_info[] = {
     // @Units: m/s
     // @Range: 0 2
     // @User: Standard
-    AP_GROUPINFO("BACKUP_SPD", 6, AC_Avoid, _backup_speed_max, 0.5f),
+    AP_GROUPINFO("BACKUP_SPD", 6, AC_Avoid, _backup_speed_max, 0.75f),
 
     // @Param: ALT_MIN
     // @DisplayName: Avoidance minimum altitude
@@ -86,7 +86,7 @@ const AP_Param::GroupInfo AC_Avoid::var_info[] = {
     // @Units: m
     // @Range: 0 6
     // @User: Standard
-    AP_GROUPINFO("ALT_MIN", 7, AC_Avoid, _alt_min, 2.0f),
+    AP_GROUPINFO("ALT_MIN", 7, AC_Avoid, _alt_min, 0.0f),
 
     // @Param: ACCEL_MAX
     // @DisplayName: Avoidance maximum acceleration
@@ -667,7 +667,7 @@ void AC_Avoid::adjust_velocity_circle_fence(float kP, float accel_cmss, Vector2f
         // we have no idea where we are....
         return;
     }
-    position_xy = position_xy * 100.0f; // m -> cm
+    position_xy *= 100.0f; // m -> cm
 
     // get the fence radius in cm
     const float fence_radius = _fence.get_radius() * 100.0f;
@@ -817,12 +817,12 @@ void AC_Avoid::adjust_velocity_inclusion_circles(float kP, float accel_cmss, Vec
     }
 
     // get vehicle position
-    Vector2f position_NE_cm;
-    if (!AP::ahrs().get_relative_position_NE_origin(position_NE_cm)) {
+    Vector2f position_NE;
+    if (!AP::ahrs().get_relative_position_NE_origin(position_NE)) {
         // do not limit velocity if we don't have a position estimate
         return;
     }
-    position_NE_cm = position_NE_cm * 100.0f;  // m to cm
+    position_NE = position_NE * 100.0f;  // m to cm
 
     // get the margin to the fence in cm
     const float margin_cm = fence->get_margin() * 100.0f;
@@ -853,7 +853,7 @@ void AC_Avoid::adjust_velocity_inclusion_circles(float kP, float accel_cmss, Vec
         float radius;
         if (fence->polyfence().get_inclusion_circle(i, center_pos_cm, radius)) {
             // get position relative to circle's center
-            const Vector2f position_NE_rel = (position_NE_cm - center_pos_cm);
+            const Vector2f position_NE_rel = (position_NE - center_pos_cm);
 
             // if we are outside this circle do not limit velocity for this circle
             const float dist_sq_cm = position_NE_rel.length_squared();
@@ -954,12 +954,12 @@ void AC_Avoid::adjust_velocity_exclusion_circles(float kP, float accel_cmss, Vec
     }
 
     // get vehicle position
-    Vector2f position_NE_cm;
-    if (!AP::ahrs().get_relative_position_NE_origin(position_NE_cm)) {
+    Vector2f position_NE;
+    if (!AP::ahrs().get_relative_position_NE_origin(position_NE)) {
         // do not limit velocity if we don't have a position estimate
         return;
     }
-    position_NE_cm = position_NE_cm * 100.0f;  // m to cm
+    position_NE = position_NE * 100.0f;  // m to cm
 
     // get the margin to the fence in cm
     const float margin_cm = fence->get_margin() * 100.0f;
@@ -984,7 +984,7 @@ void AC_Avoid::adjust_velocity_exclusion_circles(float kP, float accel_cmss, Vec
         float radius;
         if (fence->polyfence().get_exclusion_circle(i, center_pos_cm, radius)) {
             // get position relative to circle's center
-            const Vector2f position_NE_rel = (position_NE_cm - center_pos_cm);
+            const Vector2f position_NE_rel = (position_NE - center_pos_cm);
 
             // if we are inside this circle do not limit velocity for this circle
             const float dist_sq_cm = position_NE_rel.length_squared();
@@ -996,7 +996,7 @@ void AC_Avoid::adjust_velocity_exclusion_circles(float kP, float accel_cmss, Vec
                 continue;
             }
         
-            const Vector2f vector_to_center = center_pos_cm - position_NE_cm;
+            const Vector2f vector_to_center = center_pos_cm - position_NE;
             const float dist_to_boundary = vector_to_center.length() - radius_cm;
             // back away if vehicle has breached margin
             if (is_negative(dist_to_boundary - margin_cm)) {
