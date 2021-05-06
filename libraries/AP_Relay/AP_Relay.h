@@ -57,6 +57,9 @@ public:
 //    // invert the relay
 //    void        invert(uint8_t relay, bool is_inverted) { if (relay < AP_RELAY_NUM_RELAYS) { _inverted[relay] = is_inverted; } }
 //
+    // get a bitmask of the current state of the relays
+    uint16_t    getStatus();
+
     // toggle the relay status
     void        toggle(const uint8_t instance);
 

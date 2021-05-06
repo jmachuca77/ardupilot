@@ -403,6 +403,23 @@ void AP_Relay::set(const uint8_t instance, const bool value)
     }
 }
 
+uint16_t AP_Relay::getStatus()
+{
+    uint16_t status_bitmask = 0;
+    bool ison;
+    for (uint32_t instance=AP_RELAY_NUM_RELAYS; instance>0; instance--) {
+        if (is_external_pin(instance-1)) {
+            const uint8_t external_index = (_pin[instance-1] - AP_RELAY_EXTENRAL_PIN_FIRST);
+            ison = (_external.output_bitfield & (1 << external_index)) != 0;
+        } else {
+            ison = hal.gpio->read(_pin[instance-1]);
+        }
+        ison = _inverted[instance-1] ? !ison : ison;
+        status_bitmask = status_bitmask << ison;
+    }
+    return status_bitmask;
+}
+
 void AP_Relay::toggle(const uint8_t instance)
 {
     if (!enabled(instance)) {
