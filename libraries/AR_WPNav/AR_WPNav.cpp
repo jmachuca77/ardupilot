@@ -24,7 +24,7 @@ extern const AP_HAL::HAL& hal;
 #define AR_WPNAV_RADIUS_DEFAULT         2.0f
 #define AR_WPNAV_OVERSHOOT_DEFAULT      2.0f
 #define AR_WPNAV_PIVOT_ANGLE_DEFAULT    60
-#define AR_WPNAV_PIVOT_ANGLE_ACCURACY   10      // vehicle will pivot to within this many degrees of destination
+#define AR_WPNAV_PIVOT_ANGLE_ACCURACY   1      // vehicle will pivot to within this many degrees of destination
 #define AR_WPNAV_PIVOT_RATE_DEFAULT     90
 
 const AP_Param::GroupInfo AR_WPNav::var_info[] = {
@@ -82,6 +82,15 @@ const AP_Param::GroupInfo AR_WPNav::var_info[] = {
     // @Increment: 0.1
     // @User: Standard
     AP_GROUPINFO("SPEED_MIN", 6, AR_WPNav, _speed_min, 0),
+
+    // @Param: PIVOT_ACCR
+    // @DisplayName: Pivot turn exit angle
+    // @Description: The vehicle will continue to pivot turn until the yaw error is below this angle
+    // @Units: deg
+    // @Range: 0 360
+    // @Increment: 1
+    // @User: Standard
+    AP_GROUPINFO("PIVOT_ACCR", 7, AR_WPNav, _pivot_ang_accr, 0),
 
     AP_GROUPEND
 };
@@ -282,7 +291,7 @@ bool AR_WPNav::get_stopping_location(Location& stopping_loc)
 bool AR_WPNav::use_pivot_steering_at_next_WP(float yaw_error_cd) const
 {
     // check cases where we clearly cannot use pivot steering
-    if (!_pivot_possible || _pivot_angle <= AR_WPNAV_PIVOT_ANGLE_ACCURACY) {
+    if (!_pivot_possible || _pivot_angle <= _pivot_ang_accr) {
         return false;
     }
 
@@ -300,7 +309,7 @@ bool AR_WPNav::use_pivot_steering_at_next_WP(float yaw_error_cd) const
 void AR_WPNav::update_pivot_active_flag()
 {
     // check cases where we clearly cannot use pivot steering
-    if (!_pivot_possible || (_pivot_angle <= AR_WPNAV_PIVOT_ANGLE_ACCURACY)) {
+    if (!_pivot_possible || (_pivot_angle <= _pivot_ang_accr)) {
         _pivot_active = false;
         return;
     }
@@ -316,7 +325,7 @@ void AR_WPNav::update_pivot_active_flag()
     }
 
     // if within 10 degrees of the target heading, exit pivot steering
-    if (yaw_error < AR_WPNAV_PIVOT_ANGLE_ACCURACY) {
+    if (yaw_error < _pivot_ang_accr) {
         _pivot_active = false;
         return;
     }
