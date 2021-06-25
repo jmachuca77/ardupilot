@@ -1,19 +1,25 @@
 #!/bin/bash
 
-echo "`tput setaf 2`Checking homebrew...`tput sgr0`"
+function progress {
+    tput setaf 2
+    echo $*
+    tput sgr0
+}
+
+progress Checking homebrew...
 $(which -s brew)
 if [[ $? != 0 ]] ; then
-    echo "`tput setaf 2`installing homebrew... `tput sgr0`"
+    progress installing homebrew...
     ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
 else
-    echo "`tput setaf 2`Homebrew installed`tput sgr0`"
+    progress Homebrew installed
 fi
 
-echo "`tput setaf 2`Installing Xcode Command Line Tools`tput sgr0`"
+progress Installing Xcode Command Line Tools
 #Install Xcode Dependencies
 xcode-select --install
 
-echo "`tput setaf 2`Installing Homebrew Packages`tput sgr0`"
+progress Installing Homebrew Packages
 brew tap ardupilot/homebrew-ardupilot
 brew update
 brew install pyenv
@@ -21,7 +27,7 @@ brew install coreutils
 brew install gcc-arm-none-eabi
 brew install gawk
 
-echo "`tput setaf 2`Setting up pyenv...`tput sgr0`"
+progress Setting up pyenv...
 echo 'export PYENV_ROOT="$HOME/.pyenv"' >> ~/.bash_profile
 echo 'export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.bash_profile
 echo -e 'if command -v pyenv 1>/dev/null 2>&1; then\n  eval "$(pyenv init -)"\nfi' >> ~/.bash_profile
@@ -34,7 +40,7 @@ source $HOME/.zshrc
 
 pyenv init
 
-echo "`tput setaf 2`Installing Python 3.9.1 and setting it as pyenv global`tput sgr0`"
+progress Installing Python 3.9.1 and setting it as pyenv global
 env PYTHON_CONFIGURE_OPTS="--enable-framework" pyenv install 3.9.1
 pyenv global 3.9.1
 
@@ -42,27 +48,27 @@ pyenv global 3.9.1
 pyenv versions
 python --version
 
-echo "`tput setaf 2`Checking pip...`tput sgr0`"
+progress Checking pip...
 $(which -s pip)
 if [[ $? != 0 ]] ; then
-    echo "`tput setaf 2`Installing pip...`tput sgr0`"
+    progress Installing pip...
     # Easy install does not support python 2.x anymore
     # sudo easy_install pip
     curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
     sudo -H python get-pip.py
 else
-    echo "`tput setaf 2`pip already installed checking for updates...`tput sgr0`"
+    progress pip already installed checking for updates...
     sudo -H pip install --upgrade pip
     sudo -H pip install --upgrade setuptools
 fi
 
-echo "`tput setaf 2`pip installed, version:`tput sgr0`"
+progress pip installed, version:
 pip --version
 
-echo "`tput setaf 2`Installing brew version of wxpython`tput sgr0`"
+progress Installing brew version of wxpython
 brew install wxpython
 
-echo "`tput setaf 2`Installing python packages...`tput sgr0`"
+progress Installing python packages...
 pip install wheel
 pip install --user pyserial future empy mavproxy pexpect
 
@@ -84,7 +90,7 @@ grep -Fxq "$exportline" ~/.bash_profile 2>/dev/null || {
        echo $exportline >> ~/.zshrc
        eval $exportline
    else
-       echo "`tput setaf 2`Skipping adding $ARDUPILOT_ROOT/$ARDUPILOT_TOOLS to PATH.`tput sgr0`"
+       progress Skipping adding $ARDUPILOT_ROOT/$ARDUPILOT_TOOLS to PATH.
    fi
 }
 
